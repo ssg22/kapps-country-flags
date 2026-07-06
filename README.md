@@ -1,1 +1,63 @@
-# kapps-country-flags
+# Kapps Country Flags
+
+A community patch that adds per-driver national flags to the **Standings** racing overlay widget in [Kapps](https://kapps.kutu.ru), the iRacing overlay app whose development has been suspended.
+
+Kapps' Standings widget shows a driver's iRating, license, and gap/interval — but never their country. This patch adds a flag icon next to each driver's name, sourced from the `FlairID` field iRacing's own telemetry already provides (no external API calls, no login required). Drivers without a country set on their iRacing account show a small globe icon instead. The flag column is also fully integrated into Standings' own settings editor — it can be dragged, reordered, or removed like any other column.
+
+## What to expect
+
+**Live overlay** — a flag appears next to each driver's name during a session:
+
+![Live standings with country flags](images/live-standings.png)
+
+**Settings editor** — the flag is a normal, draggable column (`Country Flag`) alongside the built-in ones:
+
+![Standings settings editor showing the Country Flag column](images/settings-editor.png)
+
+## How it works
+
+Kapps ships as a compiled Electron app — there's no source code or build process to hook into. This patch works by directly editing the minified JavaScript/HTML/CSS bundled inside Kapps' `app.asar` archive (unpack → text-patch → repack), the same file format Electron apps use to package their code. `kapps-country-flags-patch.js` does this programmatically against your own local install, using Kapps' own bundled Node.js runtime (via `ELECTRON_RUN_AS_NODE`) — no separate Node.js install required.
+
+Every string replacement the script makes is guarded: it checks the exact original text exists exactly once before changing anything, and aborts without touching the file if it doesn't. This means if a future Kapps update changes the underlying code, the patch fails loudly instead of silently corrupting your install.
+
+## You are responsible for running this
+
+This script modifies a file inside your own local Kapps installation. It is not an official Kapps update, is not affiliated with or endorsed by Kapps' developer, and comes with no warranty. Review `kapps-country-flags-patch.js` yourself before running it if you want to understand exactly what it changes. By running it, you accept responsibility for the outcome — back up anything you care about first (see below for the automatic backup this script itself makes).
+
+## How to use it
+
+1. **Fully quit Kapps** — tray icon → Quit Kapps (not just closing the window).
+2. Download `apply-country-flags-patch.bat` and `kapps-country-flags-patch.js` and put them **in the same folder** together (anywhere — Desktop, Downloads, wherever).
+3. Double-click `apply-country-flags-patch.bat`.
+4. It will locate your Kapps install automatically, back up the original file, and apply the patch. Follow the on-screen prompts.
+5. Relaunch Kapps. Open the Standings overlay during a session to see flags; open Standings' settings → Driver tab to see the draggable `Country Flag` column.
+
+### Running it manually instead of the `.bat`
+
+If you'd rather not run a `.bat` file, you can invoke the script directly:
+
+```
+set ELECTRON_RUN_AS_NODE=1
+"%LOCALAPPDATA%\kapps\app-<version>\Kapps.exe" kapps-country-flags-patch.js
+```
+
+You can also pass an explicit path to `app.asar` as an argument if you don't want it auto-detected:
+
+```
+"%LOCALAPPDATA%\kapps\app-<version>\Kapps.exe" kapps-country-flags-patch.js "C:\path\to\app.asar"
+```
+
+## If something goes wrong — restoring the backup
+
+Before making any change, the script copies your current `app.asar` to `app.asar.original-backup` **in the same folder** (it will not overwrite an existing backup on a second run, so you always have the true original). To undo the patch at any point:
+
+1. Fully quit Kapps.
+2. Go to `%LOCALAPPDATA%\kapps\app-<version>\resources\`.
+3. Delete (or rename) `app.asar`.
+4. Copy `app.asar.original-backup` and rename the copy to `app.asar`.
+5. Relaunch Kapps — you're back to a completely stock install.
+
+## Requirements
+
+- Kapps installed locally (any recent version — development is suspended, so most users are on the same final build).
+- Windows. The script and `.bat` launcher were built and tested on Windows; no other platform has been tried.

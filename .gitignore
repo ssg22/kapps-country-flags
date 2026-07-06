@@ -1,0 +1,10 @@
+CLAUDE.md
+
+# Never accidentally commit a copy of Kapps' own compiled app
+*.asar
+*.asar.original-backup
+*.asar.patched
+
+# OS junk
+.DS_Store
+Thumbs.db
