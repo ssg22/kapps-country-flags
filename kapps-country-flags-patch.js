@@ -159,14 +159,6 @@ function patchStandingsCss(src) {
   return src + rule;
 }
 
-function patchRacingOverlayJs(src) {
-  return patchDefaultColumns(src, 'racing-overlay.js');
-}
-
-function patchOtherWidgetJs(src, label) {
-  return patchDefaultColumns(src, label);
-}
-
 function patchSettingsJs(src) {
   // 1) Flat {className,name,width} registry used for the chip's initial metadata.
   src = mustReplace(
@@ -204,6 +196,89 @@ function patchSettingsCss(src) {
   return src + rule;
 }
 
+// index.js is Kapps' actual Electron main process (window creation, opening layers) — a
+// completely separate bundle from the renderer files above. It carries its own independent
+// copy of the same per-variant width registry used to size the standings2 window when a
+// layer is opened; without this fix, opening a layer with the flag column active crashes
+// that size calculation and the layer's windows never open.
+function patchMainProcessJs(src) {
+  const widths40 = Array.from({ length: 40 }, () => '25').join(',');
+  src = mustReplace(
+    src,
+    '{"name":"carManufacture","width":[20,28,36,42,20,26,34,38,20,28,36,42,20,26,34,38,20,28,36,42,20,26,34,38,20,27,35,41,20,25,33,37,20,26,35,39,20,26,33,37]}',
+    `{"name":"countryFlag","width":[${widths40}]},{"name":"carManufacture","width":[20,28,36,42,20,26,34,38,20,28,36,42,20,26,34,38,20,28,36,42,20,26,34,38,20,27,35,41,20,25,33,37,20,26,35,39,20,26,33,37]}`,
+    'index.js width-variant registry'
+  );
+  src = patchDefaultColumns(src, 'index.js');
+  return src;
+}
+
+// --- Relatives country flag ---------------------------------------------------------------
+// Relatives uses a completely different, older settings system than Standings2: plain
+// boolean toggles (showCarNumber, showSRiRBadges, ...) bound directly via AngularJS
+// ng-model, not a draggable-column system. The shared widget-registry module (the same one
+// patched above for driver.columns) is duplicated across a wider set of files here — every
+// widget bundle, plus app.js (the settings-page renderer) and index.js (the main process),
+// all carry their own copy. Only the defaultSettings/urlKeys additions need to go in all of
+// them; the actual rendering logic only needs to change in relatives.js itself.
+function patchRelativesSharedSettings(src, label) {
+  src = mustReplace(
+    src,
+    'showCarNumber:!0,showCarNumberMulticlass:!0,driverNameStyle:"0",driverNameFontStyle:"0",showPitBadge:!0',
+    'showCarNumber:!0,showCarNumberMulticlass:!0,showCountryFlag:!0,driverNameStyle:"0",driverNameFontStyle:"0",showPitBadge:!0',
+    label + ' relatives defaultSettings'
+  );
+  src = mustReplace(
+    src,
+    '"showCarNumber","showCarNumberMulticlass","driverNameStyle","driverNameFontStyle","showPitBadge"',
+    '"showCarNumber","showCarNumberMulticlass","showCountryFlag","driverNameStyle","driverNameFontStyle","showPitBadge"',
+    label + ' relatives urlKeys'
+  );
+  return src;
+}
+
+function patchRelativesJs(src) {
+  src = patchRelativesSharedSettings(src, 'relatives.js');
+  src = patchDefaultColumns(src, 'relatives.js (harmless shared copy)');
+  src = mustReplace(
+    src,
+    'd.CarIsPaceCar||d.IsSpectator||(car.carNumber=`#${d.CarNumber}`),config.showManufactureLogo',
+    `d.CarIsPaceCar||d.IsSpectator||(car.carNumber=\`#${'$'}{d.CarNumber}\`,car.countryFlagUrl="global"===((${FLAIR_MAP})[d.FlairID]||"global")?"${GLOBE_ICON_DATA_URI}":\`https://flagcdn.com/16x12/${'$'}{(${FLAIR_MAP})[d.FlairID]||"global"}.png\`),config.showManufactureLogo`,
+    'relatives.js driver-mapping countryFlagUrl'
+  );
+  src = mustReplace(
+    src,
+    '$scope.showCarNumber=config.showCarNumber||config.showCarNumberMulticlass,window.addEventListener("resize"',
+    '$scope.showCarNumber=config.showCarNumber||config.showCarNumberMulticlass,$scope.showCountryFlag=config.showCountryFlag,window.addEventListener("resize"',
+    'relatives.js $scope.showCountryFlag binding'
+  );
+  return src;
+}
+
+function patchRelativesIndexHtml(src) {
+  return mustReplace(
+    src,
+    '\t\t\t<div ng-if="showCarNumber" ng-style="{\'color\': i.classColorText, \'background-color\': i.classColor}" class="car-number">\r\n\t\t\t\t<div ng-bind="i.carNumber"></div>\r\n\t\t\t</div>\r\n\t\t\t<div class="flex-horizontal flex-spacer driver-name">',
+    '\t\t\t<div ng-if="showCarNumber" ng-style="{\'color\': i.classColorText, \'background-color\': i.classColor}" class="car-number">\r\n\t\t\t\t<div ng-bind="i.carNumber"></div>\r\n\t\t\t</div>\r\n\t\t\t<div ng-if="showCountryFlag && i.countryFlagUrl" class="country-flag">\r\n\t\t\t\t<img ng-src="{{i.countryFlagUrl}}" />\r\n\t\t\t</div>\r\n\t\t\t<div class="flex-horizontal flex-spacer driver-name">',
+    'relatives/index.html row template'
+  );
+}
+
+function patchRelativesCss(src) {
+  const rule = '.country-flag{display:flex;align-items:center;justify-content:center;padding:0 .25em}.country-flag img{width:16px;height:12px;object-fit:cover;border-radius:1px}';
+  if (src.includes(rule)) throw new Error('relatives.css already contains the country-flag rule — patch already applied?');
+  return src + rule;
+}
+
+function patchRelativesSettingsHtml(src) {
+  return mustReplace(
+    src,
+    '\t\t<!-- driver name style -->',
+    '\t\t<!-- country flag -->\r\n\t\t<div class="form-group">\r\n\t\t\t<label for="inputRelativesCountryFlag" class="col-sm-3 control-label">Country Flag</label>\r\n\t\t\t<div class="col-sm-9">\r\n\t\t\t\t<label class="checkbox-inline">\r\n\t\t\t\t\t<input ng-model="settings.showCountryFlag" ng-change="saveSettings()" type="checkbox" id="inputRelativesCountryFlag">\r\n\t\t\t\t\tShow driver\'s national flag\r\n\t\t\t\t</label>\r\n\t\t\t</div>\r\n\t\t</div>\r\n\t\t<!-- driver name style -->',
+    'settings/relatives.html checkbox'
+  );
+}
+
 function main() {
   const asarPath = findAsar();
   console.log('Target app.asar:', asarPath);
@@ -228,13 +303,20 @@ function main() {
     settingsJs: overlayBase + 'standings2/settings/settings.js',
     settingsCss: overlayBase + 'standings2/settings/settings.css',
     racingOverlay: overlayBase + 'racing-overlay.js',
+    mainProcess: 'index.js',
+    appJs: 'app.js',
+    fuelCalcJs: 'apps/server/fuel-calc/fuel-calc.js',
+    relativesJs: overlayBase + 'relatives/relatives.js',
+    relativesIndexHtml: overlayBase + 'relatives/index.html',
+    relativesCss: overlayBase + 'relatives/relatives.css',
+    relativesSettingsHtml: overlayBase + 'settings/relatives.html',
   };
-  // Other overlay bundles that each carry their own copy of the shared default-settings
-  // module — only the driver.columns array needs updating in these, nothing else.
+  // Other overlay bundles that each carry their own copy of the shared widget-registry
+  // module (defaultSettings/urlKeys for every widget, including driver.columns) — these
+  // just need that shared module kept consistent, nothing widget-specific.
   const otherWidgetPaths = [
     overlayBase + 'tyres/tyres.js',
     overlayBase + 'standings/standings.js',
-    overlayBase + 'relatives/relatives.js',
     overlayBase + 'pit-helper/pit-helper.js',
     overlayBase + 'pedals/pedals.js',
     overlayBase + 'mgu/mgu.js',
@@ -254,10 +336,20 @@ function main() {
   files[paths.standingsCss] = Buffer.from(patchStandingsCss(files[paths.standingsCss].toString('utf8')), 'utf8');
   files[paths.settingsJs] = Buffer.from(patchSettingsJs(files[paths.settingsJs].toString('utf8')), 'utf8');
   files[paths.settingsCss] = Buffer.from(patchSettingsCss(files[paths.settingsCss].toString('utf8')), 'utf8');
-  files[paths.racingOverlay] = Buffer.from(patchRacingOverlayJs(files[paths.racingOverlay].toString('utf8')), 'utf8');
+  files[paths.racingOverlay] = Buffer.from(patchDefaultColumns(patchRelativesSharedSettings(files[paths.racingOverlay].toString('utf8'), 'racing-overlay.js'), 'racing-overlay.js'), 'utf8');
+  files[paths.mainProcess] = Buffer.from(patchRelativesSharedSettings(patchMainProcessJs(files[paths.mainProcess].toString('utf8')), 'index.js'), 'utf8');
+  files[paths.appJs] = Buffer.from(patchRelativesSharedSettings(files[paths.appJs].toString('utf8'), 'app.js'), 'utf8');
+  files[paths.fuelCalcJs] = Buffer.from(patchRelativesSharedSettings(files[paths.fuelCalcJs].toString('utf8'), 'fuel-calc.js'), 'utf8');
+  files[paths.relativesJs] = Buffer.from(patchRelativesJs(files[paths.relativesJs].toString('utf8')), 'utf8');
+  files[paths.relativesIndexHtml] = Buffer.from(patchRelativesIndexHtml(files[paths.relativesIndexHtml].toString('utf8')), 'utf8');
+  files[paths.relativesCss] = Buffer.from(patchRelativesCss(files[paths.relativesCss].toString('utf8')), 'utf8');
+  files[paths.relativesSettingsHtml] = Buffer.from(patchRelativesSettingsHtml(files[paths.relativesSettingsHtml].toString('utf8')), 'utf8');
 
   for (const p of otherWidgetPaths) {
-    files[p] = Buffer.from(patchOtherWidgetJs(files[p].toString('utf8'), p), 'utf8');
+    let content = files[p].toString('utf8');
+    content = patchDefaultColumns(content, p);
+    content = patchRelativesSharedSettings(content, p);
+    files[p] = Buffer.from(content, 'utf8');
   }
 
   const tmpPath = asarPath + '.new';

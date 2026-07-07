@@ -1,18 +1,29 @@
 # Kapps Country Flags
 
-A community patch that adds per-driver national flags to the **Standings** racing overlay widget in [Kapps](https://kapps.kutu.ru), the iRacing overlay app whose development has been suspended.
+A community patch that adds per-driver national flags to the **Standings** and **Relatives** racing overlay widgets in [Kapps](https://kapps.kutu.ru), the iRacing overlay app whose development has been suspended.
 
-Kapps' Standings widget shows a driver's iRating, license, and gap/interval — but never their country. This patch adds a flag icon next to each driver's name, sourced from the `FlairID` field iRacing's own telemetry already provides (no external API calls, no login required). Drivers without a country set on their iRacing account show a small globe icon instead. The flag column is also fully integrated into Standings' own settings editor — it can be dragged, reordered, or removed like any other column.
+Neither widget shows a driver's country by default. This patch adds a flag icon next to each driver, sourced from the `FlairID` field iRacing's own telemetry already provides (no external API calls, no login required). Drivers without a country set on their iRacing account show a small globe icon instead.
+
+- In **Standings**, the flag is a first-class column fully integrated into the settings editor — it can be dragged, reordered, or removed like any other column.
+- In **Relatives**, the flag is a simple on/off toggle (matching how the rest of that widget's settings work) placed right after the "Car Number" option, and displays right after each driver's car number in the overlay.
 
 ## What to expect
 
-**Live overlay** — a flag appears next to each driver's name during a session:
+**Live standings** — a flag appears next to each driver's name during a session:
 
 ![Live standings with country flags](images/live-standings.png)
 
-**Settings editor** — the flag is a normal, draggable column (`Country Flag`) alongside the built-in ones:
+**Standings settings editor** — the flag is a normal, draggable column (`Country Flag`) alongside the built-in ones:
 
 ![Standings settings editor showing the Country Flag column](images/settings-editor.png)
+
+**Live relatives** — the flag appears right after each driver's car number (drivers without a country set show a globe icon, like Simran Gill below):
+
+![Live relatives with country flags](images/live-relatives.png)
+
+**Relatives settings** — a simple "Country Flag" checkbox right after "Car Number":
+
+![Relatives settings showing the Country Flag checkbox](images/relatives-settings.png)
 
 ## How it works
 
@@ -30,7 +41,7 @@ This script modifies a file inside your own local Kapps installation. It is not 
 2. Download `apply-country-flags-patch.bat` and `kapps-country-flags-patch.js` and put them **in the same folder** together (anywhere — Desktop, Downloads, wherever).
 3. Double-click `apply-country-flags-patch.bat`.
 4. It will locate your Kapps install automatically, back up the original file, and apply the patch. Follow the on-screen prompts.
-5. Relaunch Kapps. Open the Standings overlay during a session to see flags; open Standings' settings → Driver tab to see the draggable `Country Flag` column.
+5. Relaunch Kapps. Open the Standings overlay during a session to see flags; open Standings' settings → Driver tab to see the draggable `Country Flag` column. For Relatives, open its settings page and enable the new "Country Flag" checkbox (found right after "Car Number").
 
 ### Running it manually instead of the `.bat`
 
