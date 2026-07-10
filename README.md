@@ -1,13 +1,17 @@
 # Kapps Country Flags
 
-A community patch that adds per-driver national flags to the **Standings** and **Relatives** racing overlay widgets in [Kapps](https://kapps.kutu.ru), the iRacing overlay app whose development has been suspended.
+A community patch for [Kapps](https://kapps.kutu.ru), the iRacing overlay app whose development has been suspended. It adds a few features Kapps itself never shipped:
 
-Neither widget shows a driver's country by default. This patch adds a flag icon next to each driver, sourced from the `FlairID` field iRacing's own telemetry already provides (no external API calls, no login required). Drivers without a country set on their iRacing account show a small globe icon instead.
+- **Country flags** next to each driver in **Standings** and **Relatives**
+- A **Fastest Lap column** in **Standings**, highlighting whoever holds the fastest lap within their own class
+- A **Target Laps** row in the **Fuel Calculator**, showing the fuel-per-lap needed for a couple of laps around your current pace
+
+## Country flags
+
+Neither Standings nor Relatives shows a driver's country by default. This patch adds a flag icon next to each driver, sourced from the `FlairID` field iRacing's own telemetry already provides (no external API calls, no login required). Drivers without a country set on their iRacing account show a small globe icon instead.
 
 - In **Standings**, the flag is a first-class column fully integrated into the settings editor — it can be dragged, reordered, or removed like any other column.
 - In **Relatives**, the flag is a simple on/off toggle (matching how the rest of that widget's settings work) placed right after the "Car Number" option, and displays right after each driver's car number in the overlay.
-
-## What to expect
 
 **Live standings** — a flag appears next to each driver's name during a session:
 
@@ -25,6 +29,20 @@ Neither widget shows a driver's country by default. This patch adds a flag icon 
 
 ![Relatives settings showing the Country Flag checkbox](images/relatives-settings.png)
 
+## Fastest Lap column (Standings)
+
+A new draggable/removable column showing each driver's session-best lap time — addable and reorderable in the settings editor exactly like the built-in columns, with the same P&Q/Race precision options (3 precision levels each) that Last Lap Time has.
+
+Whichever driver currently holds the fastest lap **within their own class** (GT3, LMP2, etc. — computed the same way iRacing itself tracks class-relative fastest laps) gets a solid purple highlight, so it's easy to spot at a glance in multiclass races:
+
+![Standings with the Fastest Lap column, one driver highlighted purple](images/live-standings-fastest-lap.png)
+
+## Target Laps (Fuel Calculator)
+
+A new row at the bottom of the Fuel Calculator overlay showing the fuel-per-lap needed for the lap you're on pace for, plus one lap on either side — so you can see at a glance what adjusting your pace by a lap or two would cost or save in fuel. Toggled on via a new "Target Laps" checkbox in the Fuel Calculator's settings, placed above "Custom".
+
+![Fuel Calculator with the Target Laps row](images/fuel-target.png)
+
 ## How it works
 
 Kapps ships as a compiled Electron app — there's no source code or build process to hook into. This patch works by directly editing the minified JavaScript/HTML/CSS bundled inside Kapps' `app.asar` archive (unpack → text-patch → repack), the same file format Electron apps use to package their code. `kapps-country-flags-patch.js` does this programmatically against your own local install, using Kapps' own bundled Node.js runtime (via `ELECTRON_RUN_AS_NODE`) — no separate Node.js install required.
@@ -41,7 +59,7 @@ This script modifies a file inside your own local Kapps installation. It is not 
 2. Download `apply-country-flags-patch.bat` and `kapps-country-flags-patch.js` and put them **in the same folder** together (anywhere — Desktop, Downloads, wherever).
 3. Double-click `apply-country-flags-patch.bat`.
 4. It will locate your Kapps install automatically, back up the original file, and apply the patch. Follow the on-screen prompts.
-5. Relaunch Kapps. Open the Standings overlay during a session to see flags; open Standings' settings → Driver tab to see the draggable `Country Flag` column. For Relatives, open its settings page and enable the new "Country Flag" checkbox (found right after "Car Number").
+5. Relaunch Kapps. Open the Standings overlay during a session to see flags; open Standings' settings → Driver tab to see the draggable `Country Flag` and `Fastest Lap` columns. For Relatives, open its settings page and enable the new "Country Flag" checkbox (found right after "Car Number"). For the Fuel Calculator, open its settings and enable "Target Laps" (found above "Custom").
 
 ### Running it manually instead of the `.bat`
 

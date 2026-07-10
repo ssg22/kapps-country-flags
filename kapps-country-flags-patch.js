@@ -141,6 +141,15 @@ function patchStandingsJs(src) {
     'standings.js apply()'
   );
   src = patchDefaultColumns(src, 'standings.js');
+  // Same defensive injection as settings.js: make sure "country-flag" is always present in
+  // whatever driver.columns array gets loaded (persisted settings predating this feature won't
+  // have it), before the template-pruning step decides which column elements survive.
+  src = mustReplace(
+    src,
+    '})(this.headerTemplate,i.settings.header.columns,["class-border","session-type","bg"]),t(this.driverTemplate,i.settings.driver.columns,["position"])',
+    '})(this.headerTemplate,i.settings.header.columns,["class-border","session-type","bg"]),i.settings.driver.columns.includes("country-flag")||i.settings.driver.columns.splice(i.settings.driver.columns.indexOf("name")+1,0,"country-flag"),t(this.driverTemplate,i.settings.driver.columns,["position"])',
+    'standings.js template-pruning country-flag injection'
+  );
   return src;
 }
 
@@ -187,6 +196,16 @@ function patchSettingsJs(src) {
     'settings.js early column injection'
   );
 
+  // 4) A second, later pass re-appends columns in driver.columns order to fix drag-drop
+  //    ordering — needs the same defensive injection or a persisted settings array without
+  //    "country-flag" leaves it un-reordered here too.
+  src = mustReplace(
+    src,
+    'Pe.setInstances(Ae),se=0,F=(ce=this.data[Be].columns).length',
+    'Pe.setInstances(Ae),("driver"!==Be||this.data[Be].columns.includes("country-flag")||this.data[Be].columns.splice(this.data[Be].columns.indexOf("name")+1,0,"country-flag")),se=0,F=(ce=this.data[Be].columns).length',
+    'settings.js late column injection'
+  );
+
   return src;
 }
 
@@ -194,6 +213,317 @@ function patchSettingsCss(src) {
   const rule = `.atlas.driver.country-flag{width:25px;height:25px;background-color:#000;background-image:url(${CHIP_FLAG_DATA_URI});background-size:20px 10px;background-repeat:no-repeat;background-position:center;border-radius:2px}`;
   if (src.includes(rule)) throw new Error('settings.css already contains the country-flag chip rule — patch already applied?');
   return src + rule;
+}
+
+// --- Standings Fastest Lap column ----------------------------------------------------------
+// Adds a session-best-lap column to Standings, addable/removable via the same drag-and-drop
+// editor as every other column. Mirrors lapTime's own registration surface closely, since it
+// shares the same P&Q/Race precision popup and width-measurement machinery.
+function patchWorkerFastestLap(src) {
+  src = mustReplace(
+    src,
+    '"isPBLapTime","isBestLapTime","tyreCompound","joker","gainHistory"',
+    '"isPBLapTime","isBestLapTime","fastestLap","tyreCompound","joker","gainHistory"',
+    'worker.js mainKeys fastestLap'
+  );
+  src = mustReplace(
+    src,
+    'i.isBestLapTime=null,i.tyreCompound=null',
+    'i.isBestLapTime=null,i.fastestLap=null,i.tyreCompound=null',
+    'worker.js reset fastestLap'
+  );
+  // lapTime/gap/int are computed independently across three session-state branches (Race,
+  // Qualify, Practice), each reading from a different source field — fastestLap needs adding
+  // to all three or it silently never populates outside of Race sessions.
+  src = mustReplace(
+    src,
+    'l.lapTime=u?.001*(1e3*B.LastTime|0):null,B.LapsComplete>1&&(g=B.FastestLap===B.LapsComplete)',
+    'l.lapTime=u?.001*(1e3*B.LastTime|0):null,l.fastestLap=B.FastestTime>0?.001*(1e3*B.FastestTime|0):null,B.LapsComplete>1&&(g=B.FastestLap===B.LapsComplete)',
+    'worker.js race-branch fastestLap'
+  );
+  src = mustReplace(
+    src,
+    's&&u&&(l.lapTime=.001*(1e3*B.Time|0))),l.gapData.ppq=B,E.set(a,n))',
+    's&&u&&(l.lapTime=.001*(1e3*B.Time|0),l.fastestLap=B.FastestTime>0?.001*(1e3*B.FastestTime|0):null)),l.gapData.ppq=B,E.set(a,n))',
+    'worker.js qualify-branch fastestLap'
+  );
+  src = mustReplace(
+    src,
+    'l.lapTime=o>0?o:null,C.WeekendInfo.HeatRacing',
+    'l.lapTime=o>0?o:null,l.fastestLap=B.FastestTime>0?.001*(1e3*B.FastestTime|0):null,C.WeekendInfo.HeatRacing',
+    'worker.js practice-branch fastestLap'
+  );
+  return src;
+}
+
+function patchStandingsJsFastestLap(src) {
+  // standings.js loads its own settings independently of settings.js (Object.assign against
+  // defaultSettings + a shallow merge of a URL-param override) — needs its own backfill so an
+  // existing user's saved override (which predates this column) doesn't leave it undefined.
+  src = mustReplace(
+    src,
+    'this.settings=Object.assign({},a.defaultSettings.settings),this.params.settings&&n(this.settings,JSON.parse(this.params.settings)),this.font=r.getById(this.settings.font)',
+    'this.settings=Object.assign({},a.defaultSettings.settings),this.params.settings&&n(this.settings,JSON.parse(this.params.settings)),null==this.settings.driver.fastestLap&&(this.settings.driver.fastestLap=a.defaultSettings.settings.driver.fastestLap),this.font=r.getById(this.settings.font)',
+    'standings.js settings.driver.fastestLap backfill'
+  );
+  // Format the raw value into the hidden "fake" element, same pattern as lapTime.
+  src = mustReplace(
+    src,
+    'this.dataContentEls.has("lapTime")&&this.data._apply.lapTime&&([I,C,r]=this.getApplyData("lapTime"),null!=I?(_=h.sessionData.isRaceStarted?"race":"pandq",x=function(){if(I>=599.95)return 1;switch(l.settings.driver.lapTime[_].precision){case"fractions-3":return 3;case"fractions-2":return 2;case"fractions-1":return 1}}(),r.textContent=p(I,x)):r.textContent="",r.classList.toggle("hidden",null==I)),this.dataContentEls.has("tyreCompound")',
+    'this.dataContentEls.has("lapTime")&&this.data._apply.lapTime&&([I,C,r]=this.getApplyData("lapTime"),null!=I?(_=h.sessionData.isRaceStarted?"race":"pandq",x=function(){if(I>=599.95)return 1;switch(l.settings.driver.lapTime[_].precision){case"fractions-3":return 3;case"fractions-2":return 2;case"fractions-1":return 1}}(),r.textContent=p(I,x)):r.textContent="",r.classList.toggle("hidden",null==I)),this.dataContentEls.has("fastestLap")&&this.data._apply.fastestLap&&([I,C,r]=this.getApplyData("fastestLap"),null!=I?(_=h.sessionData.isRaceStarted?"race":"pandq",x=function(){if(I>=599.95)return 1;switch((l.settings.driver.fastestLap&&l.settings.driver.fastestLap[_]&&l.settings.driver.fastestLap[_].precision)||"fractions-3"){case"fractions-3":return 3;case"fractions-2":return 2;case"fractions-1":return 1}}(),r.textContent=p(I,x)):r.textContent="",r.classList.toggle("hidden",null==I)),this.dataContentEls.has("tyreCompound")',
+    'standings.js apply-block fastestLap'
+  );
+  // Reveal step: copies the formatted text from the hidden "fake" element into the visible
+  // "real" sibling. Every column needing this has its own dedicated revealXXX(), dispatched
+  // from revealAll() — a bare data pipeline with no reveal step just never displays anything.
+  src = mustReplace(
+    src,
+    'this.dataContentEls.has("lapTime")&&this.revealLapTime(),',
+    'this.dataContentEls.has("lapTime")&&this.revealLapTime(),this.dataContentEls.has("fastestLap")&&this.revealFastestLap(),',
+    'standings.js revealAll dispatcher fastestLap'
+  );
+  src = mustReplace(
+    src,
+    'async revealTyreCompound(){',
+    'async revealFastestLap(){if(this.data._reveal.fastestLap){var e=this.dataContentEls.get("fastestLap");e.nextElementSibling.textContent=e.textContent}this.data._reveal.isBestLapTime&&(this.style.bestLapTime=this.data.isBestLapTime)}async revealTyreCompound(){',
+    'standings.js revealFastestLap definition'
+  );
+  // standings.js carries its OWN independent copy of the widget's defaultSettings (same
+  // shared-registry duplication pattern as everywhere else in this file) — separate from
+  // settings.js's copy, patched above. Missing this is what caused fastestLap to silently
+  // stay undefined specifically once isRaceStarted flips true (switching the precision lookup
+  // from "pandq" to "race" mode) during an actual Race session — Practice/Qualify testing
+  // never exercised that branch, so this went unnoticed until a live race.
+  src = mustReplace(
+    src,
+    'lapTime:{pandq:{precision:"fractions-3"},race:{precision:"fractions-1"}},pit:{style:"pit-time"}',
+    'lapTime:{pandq:{precision:"fractions-3"},race:{precision:"fractions-1"}},fastestLap:{pandq:{precision:"fractions-3"},race:{precision:"fractions-1"}},pit:{style:"pit-time"}',
+    'standings.js fastestLap defaultSettings'
+  );
+  return src;
+}
+
+function patchIndexHtmlFastestLap(src) {
+  // Each column has a hidden "fake" element (used only for layout/width measurement) and a
+  // separate "real" element the actual live text gets written into — a column with only the
+  // fake element has structurally nowhere for its value to ever render.
+  return mustReplace(
+    src,
+    '\t\t\t\t</div>\r\n\t\t\t\t<div class="tyre-compound">',
+    '\t\t\t\t</div>\r\n\t\t\t\t<div class="fastest-lap">\r\n\t\t\t\t\t<div class="content mono fake hidden" data-column="fastest-lap" data-content="fastestLap"></div>\r\n\t\t\t\t\t<div class="content mono real"></div>\r\n\t\t\t\t</div>\r\n\t\t\t\t<div class="tyre-compound">',
+    'index.html fastest-lap column'
+  );
+}
+
+function patchStandingsCssFastestLap(src) {
+  // The fake/real elements need position:absolute (fake also gets visibility:hidden) so the
+  // hidden one can be measured via getBoundingClientRect() without affecting layout — without
+  // this the column measures as a 0-width sliver.
+  //
+  // Highlight color: a solid purple fill, shown ONLY on the "best-lap-time" row class — the
+  // same per-CLASS "who holds the fastest lap in their own class" flag (isBestLapTime, already
+  // computed in worker.js by comparing FastestTime only against same-CarClassID rivals) that
+  // drives Last Lap Time's own "purple lap" indicator. A gradient/underline treatment matching
+  // Last Lap's exact visual was tried first, but its radial-gradient falloff reads much weaker
+  // on Fastest Lap's narrower column, so a plain solid fill was used instead for reliable
+  // visibility regardless of column width or the user's configured background opacity.
+  const rule =
+    '.rows > .row.driver > .wrap > div.fastest-lap{width:var(--column-width-fastest-lap);justify-content:flex-end}' +
+    '.rows > .row.driver > .wrap > div.fastest-lap > .fake{position:absolute;visibility:hidden}' +
+    '.rows > .row.driver > .wrap > div.fastest-lap > .real{position:absolute}' +
+    '.rows > .row.driver.best-lap-time > .wrap > div.fastest-lap{background-color:#a020f0;border-radius:3px}' +
+    '.rows.animate > .row.driver > .wrap > div.fastest-lap{transition:var(--transition-duration) background-color ease-out}';
+  if (src.includes(rule)) throw new Error('standings.css already contains the fastest-lap rule — patch already applied?');
+  return src + rule;
+}
+
+function patchSettingsJsFastestLap(src) {
+  // 1) Flat {className,name,options} registry entry — same precision sub-options/widths as
+  //    lap-time, since fastest lap uses the identical text format.
+  src = mustReplace(
+    src,
+    '{"className":"lap-time","name":"lapTime","options":[{"className":["precision"],"name":["precision"],"options":[{"className":["precision-fractions-3"],"option":["fractions-3"],"width":80},{"className":["precision-fractions-2"],"option":["fractions-2"],"width":71},{"className":["precision-fractions-1"],"option":["fractions-1"],"width":63}]}]}',
+    '{"className":"lap-time","name":"lapTime","options":[{"className":["precision"],"name":["precision"],"options":[{"className":["precision-fractions-3"],"option":["fractions-3"],"width":80},{"className":["precision-fractions-2"],"option":["fractions-2"],"width":71},{"className":["precision-fractions-1"],"option":["fractions-1"],"width":63}]}]},{"className":"fastest-lap","name":"fastestLap","options":[{"className":["precision"],"name":["precision"],"options":[{"className":["precision-fractions-3"],"option":["fractions-3"],"width":80},{"className":["precision-fractions-2"],"option":["fractions-2"],"width":71},{"className":["precision-fractions-1"],"option":["fractions-1"],"width":63}]}]}',
+    'settings.js flat registry fastest-lap'
+  );
+
+  // 2) Module-4700-style per-variant width table (JSON.parse blob) — same structure/values.
+  src = mustReplace(
+    src,
+    '{"name":"lapTime","options":[{"options":["fractions-3"],"width":[56,69,93,106,56,67,91,102,59,78,89,112,59,76,87,108,59,78,94,112,59,76,92,108,59,68,80,103,59,66,78,99,54,61,82,98,54,61,80,96]},{"options":["fractions-2"],"width":[50,62,83,95,50,60,81,91,53,69,80,100,53,67,78,96,53,69,84,100,53,67,82,96,53,61,71,92,53,59,69,88,48,54,74,87,48,54,72,85]},{"options":["fractions-1"],"width":[44,54,73,84,44,52,71,80,46,61,70,88,46,59,68,84,46,61,74,88,46,59,72,84,46,54,63,81,46,52,61,77,42,48,65,77,42,48,63,75]}]}',
+    '{"name":"lapTime","options":[{"options":["fractions-3"],"width":[56,69,93,106,56,67,91,102,59,78,89,112,59,76,87,108,59,78,94,112,59,76,92,108,59,68,80,103,59,66,78,99,54,61,82,98,54,61,80,96]},{"options":["fractions-2"],"width":[50,62,83,95,50,60,81,91,53,69,80,100,53,67,78,96,53,69,84,100,53,67,82,96,53,61,71,92,53,59,69,88,48,54,74,87,48,54,72,85]},{"options":["fractions-1"],"width":[44,54,73,84,44,52,71,80,46,61,70,88,46,59,68,84,46,61,74,88,46,59,72,84,46,54,63,81,46,52,61,77,42,48,65,77,42,48,63,75]}]},{"name":"fastestLap","options":[{"options":["fractions-3"],"width":[56,69,93,106,56,67,91,102,59,78,89,112,59,76,87,108,59,78,94,112,59,76,92,108,59,68,80,103,59,66,78,99,54,61,82,98,54,61,80,96]},{"options":["fractions-2"],"width":[50,62,83,95,50,60,81,91,53,69,80,100,53,67,78,96,53,69,84,100,53,67,82,96,53,61,71,92,53,59,69,88,48,54,74,87,48,54,72,85]},{"options":["fractions-1"],"width":[44,54,73,84,44,52,71,80,46,61,70,88,46,59,68,84,46,61,74,88,46,59,72,84,46,54,63,81,46,52,61,77,42,48,65,77,42,48,63,75]}]}',
+    'settings.js width-variant registry fastest-lap'
+  );
+
+  // 3) Precision-options map — drives the actual hover-popup contents, distinct from the width
+  //    table above. Without this, createOptionContentPQR reads undefined.precision and throws,
+  //    blanking the entire settings editor before it paints anything.
+  src = mustReplace(
+    src,
+    'lapTime:{precision:[{id:"fractions-3"},{id:"fractions-2"},{id:"fractions-1"}]},pit:{style:',
+    'lapTime:{precision:[{id:"fractions-3"},{id:"fractions-2"},{id:"fractions-1"}]},fastestLap:{precision:[{id:"fractions-3"},{id:"fractions-2"},{id:"fractions-1"}]},pit:{style:',
+    'settings.js precision-options map fastestLap'
+  );
+
+  // 4) The P&Q/Race precision popup UI is a hardcoded switch(columnName) — fall through from
+  //    lapTime so fastestLap gets the identical popup.
+  src = mustReplace(
+    src,
+    'case"lapTime":(v=document.createElement("div")).classList.add("options",Be,M.className),te=this.createOptionContentPQR(b,Be,M,M,"pandq","precision")',
+    'case"lapTime":case"fastestLap":(v=document.createElement("div")).classList.add("options",Be,M.className),te=this.createOptionContentPQR(b,Be,M,M,"pandq","precision")',
+    'settings.js switch case fall-through'
+  );
+
+  // 5) defaultSettings entry.
+  src = mustReplace(
+    src,
+    'lapTime:{pandq:{precision:"fractions-3"},race:{precision:"fractions-1"}},pit:{style:"pit-time"}',
+    'lapTime:{pandq:{precision:"fractions-3"},race:{precision:"fractions-1"}},fastestLap:{pandq:{precision:"fractions-3"},race:{precision:"fractions-1"}},pit:{style:"pit-time"}',
+    'settings.js fastestLap defaultSettings'
+  );
+
+  // 6) Backfill this.data.driver.fastestLap for existing users whose saved settings predate
+  //    this column — the chip-generation loop reads this.data.driver.fastestLap.precision
+  //    unconditionally for any column with precision sub-options, and a genuinely-undefined
+  //    (not just missing-key) parent object throws there, blanking the whole editor.
+  src = mustReplace(
+    src,
+    'null==(l=this.data.colors).bgLightness&&(l.bgLightness=this.defaultSettings.colors.bgLightness),De={header:',
+    'null==(l=this.data.colors).bgLightness&&(l.bgLightness=this.defaultSettings.colors.bgLightness),null==this.data.driver.fastestLap&&(this.data.driver.fastestLap=JSON.parse(JSON.stringify(this.defaultSettings.driver.fastestLap))),De={header:',
+    'settings.js constructor fastestLap data backfill'
+  );
+
+  // 7) getBoundsBySettings does its own independent shallow settings merge (used to size the
+  //    Preview panel) — needs the same backfill or it throws mid-render and Preview stays blank.
+  src = mustReplace(
+    src,
+    'p=(N=s.getById("standings2")).defaultSettings.settings,e=o({},p,e),t={width:{header:0,driver:{pandq:0,race:0}},height:0},u=a(e.font,e.condensed,e.header.size)',
+    'p=(N=s.getById("standings2")).defaultSettings.settings,e=o({},p,e),null==e.driver.fastestLap&&(e.driver.fastestLap=p.driver.fastestLap),t={width:{header:0,driver:{pandq:0,race:0}},height:0},u=a(e.font,e.condensed,e.header.size)',
+    'settings.js getBoundsBySettings fastestLap backfill'
+  );
+
+  // 8) Width-SUM calculation (separate from the width table in step 2) needs fastest-lap added
+  //    alongside lap-time or it silently uses the wrong (non-precision-aware) lookup path.
+  src = mustReplace(
+    src,
+    'case"gap":case"int":case"lap-time":return w(I,P,h,A);case"name":',
+    'case"gap":case"int":case"lap-time":case"fastest-lap":return w(I,P,h,A);case"name":',
+    'settings.js width-calc switch fastest-lap'
+  );
+
+  return src;
+}
+
+function patchSettingsCssFastestLap(src) {
+  // The chip-picker's "atlas" class sizes/backgrounds each column from a shared sprite sheet,
+  // keyed by className + precision variant — reusing lap-time's exact crop so it's visually
+  // identical to it, then tinting purple (blend-mode, since the sprite crop is opaque and a
+  // plain background-color would sit invisibly behind it) to distinguish the two at a glance.
+  const rule = '.atlas.driver.fastest-lap.precision-fractions-3{width:80px;height:25px;background-position:-347px -500px}.atlas.driver.fastest-lap.precision-fractions-2{width:71px;height:25px;background-position:-427px -500px}.atlas.driver.fastest-lap.precision-fractions-1{width:63px;height:25px;background-position:0 -525px}.atlas.driver.fastest-lap{background-color:#8b3ef2;background-blend-mode:multiply}';
+  if (src.includes(rule)) throw new Error('settings.css already contains the fastest-lap atlas rule — patch already applied?');
+  return src + rule;
+}
+
+// --- Fuel Calculator target laps -----------------------------------------------------------
+// Adds a "target laps" row to the Fuel Calculator overlay, showing the fuel-per-lap needed for
+// the laps immediately around the driver's current average-pace target (floor(fuelLevel/usage)
+// ± 1), mirroring irdashies' useFuelCalculation.tsx. Toggle placed above "Custom" in settings.
+function patchTargetLapsSharedSettings(src, label) {
+  // Same shared-registry duplication pattern as country-flag/relatives above — every widget
+  // bundle carries its own copy of Fuel Calculator's defaultSettings/urlKeys regardless of
+  // whether that specific widget uses them. app.js embeds this registry more than once
+  // (settings-page's own copy plus the widget-registry copy), hence "at least 1" not "exactly 1".
+  const A_from = 'showQualy:!0,showLast:!1,showCustom:!1,showClock:!1,clockStyle:"24",hideClockWhenInMulticlass:!0';
+  const A_to = 'showQualy:!0,showLast:!1,showTargetLaps:!1,showCustom:!1,showClock:!1,clockStyle:"24",hideClockWhenInMulticlass:!0';
+  const B_from = '"showQualy","showLast","showCustom","showClock","clockStyle","hideClockWhenInMulticlass"';
+  const B_to = '"showQualy","showLast","showTargetLaps","showCustom","showClock","clockStyle","hideClockWhenInMulticlass"';
+
+  const countA = src.split(A_from).length - 1;
+  if (countA < 1) throw new Error(`Expected at least 1 occurrence of the ${label} fuelCalc defaultSettings anchor, found 0. This Kapps version's code doesn't match what this patch expects — aborting without changing anything.`);
+  src = src.split(A_from).join(A_to);
+
+  const countB = src.split(B_from).length - 1;
+  if (countB < 1) throw new Error(`Expected at least 1 occurrence of the ${label} fuelCalc urlKeys anchor, found 0. This Kapps version's code doesn't match what this patch expects — aborting without changing anything.`);
+  src = src.split(B_from).join(B_to);
+
+  return src;
+}
+
+function patchFuelCalcJs(src) {
+  // Target-lap scenarios, mirroring irdashies' useFuelCalculation.tsx: currentLapTarget =
+  // floor(fuelLevel/avgUsage); show that lap plus one on either side, each with its own
+  // fuel-per-lap requirement.
+  src = mustReplace(
+    src,
+    'scope.remainAvg=curFuelLevel/scope.usageAvg,null!=scope.usageQualy&&(scope.remainQualy=curFuelLevel/scope.usageQualy)',
+    'scope.remainAvg=curFuelLevel/scope.usageAvg,(function(fl,ua){if(ua>0&&fl/ua>=.5){var mid=Math.floor(fl/ua);scope.targetLapsA=mid>1?mid-1:null,scope.targetFuelA=scope.targetLapsA?fl/scope.targetLapsA:null,scope.targetLapsB=mid,scope.targetFuelB=fl/mid,scope.targetLapsC=mid+1,scope.targetFuelC=fl/(mid+1)}else scope.targetLapsA=scope.targetLapsB=scope.targetLapsC=scope.targetFuelA=scope.targetFuelB=scope.targetFuelC=null})(curFuelLevel,scope.usageAvg),null!=scope.usageQualy&&(scope.remainQualy=curFuelLevel/scope.usageQualy)',
+    'fuel-calc.js target-laps calculation'
+  );
+  // Reset state on disconnect/reset.
+  src = mustReplace(
+    src,
+    'refuelAvg:null,refuelQualy:null,refuelLast:null,refuelCustom:null,extraMode:2',
+    'refuelAvg:null,refuelQualy:null,refuelLast:null,refuelCustom:null,targetLapsA:null,targetFuelA:null,targetLapsB:null,targetFuelB:null,targetLapsC:null,targetFuelC:null,extraMode:2',
+    'fuel-calc.js dataEmpty targetLaps'
+  );
+  // AppCtrl copies each setting from config to $scope by explicit name (not a generic merge) —
+  // without this line the toggle changes the saved setting but the live widget never sees it.
+  src = mustReplace(
+    src,
+    '$scope.showLast=config.showLast,$scope.showCustom=config.showCustom',
+    '$scope.showLast=config.showLast,$scope.showTargetLaps=config.showTargetLaps,$scope.showCustom=config.showCustom',
+    'fuel-calc.js AppCtrl showTargetLaps scope copy'
+  );
+  return src;
+}
+
+function patchFuelCalcHtml(src) {
+  const newRow =
+    '\t\t\t\t<div ng-if="showTargetLaps && fuelCalc.targetLapsA" class="cell target-laps">\r\n' +
+    '\t\t\t\t\t<div class="header">L{{ fuelCalc.targetLapsA }}</div>\r\n' +
+    '\t\t\t\t\t<div fuel-calc-value="targetFuelA" class="value"></div>\r\n' +
+    '\t\t\t\t</div>\r\n' +
+    '\t\t\t\t<div ng-if="showTargetLaps && fuelCalc.targetLapsB" class="cell target-laps current">\r\n' +
+    '\t\t\t\t\t<div class="header">L{{ fuelCalc.targetLapsB }}</div>\r\n' +
+    '\t\t\t\t\t<div fuel-calc-value="targetFuelB" class="value"></div>\r\n' +
+    '\t\t\t\t</div>\r\n' +
+    '\t\t\t\t<div ng-if="showTargetLaps && fuelCalc.targetLapsC" class="cell target-laps">\r\n' +
+    '\t\t\t\t\t<div class="header">L{{ fuelCalc.targetLapsC }}</div>\r\n' +
+    '\t\t\t\t\t<div fuel-calc-value="targetFuelC" class="value"></div>\r\n' +
+    '\t\t\t\t</div>\r\n';
+  return mustReplace(
+    src,
+    '\t\t\t\t<div ng-if="showCustom" class="cell custom">\r\n\t\t\t\t\t<div fuel-calc-value="extraCustom" class="value"></div>\r\n\t\t\t\t</div>\r\n\r\n\t\t\t</div>',
+    '\t\t\t\t<div ng-if="showCustom" class="cell custom">\r\n\t\t\t\t\t<div fuel-calc-value="extraCustom" class="value"></div>\r\n\t\t\t\t</div>\r\n\r\n' + newRow + '\r\n\t\t\t</div>',
+    'fuel-calc.html target-laps row'
+  );
+}
+
+function patchFuelCalcCss(src) {
+  const rule = 'body>#app>.app>.wrap>.cell.target-laps.current{color:#4caf50}';
+  if (src.includes(rule)) throw new Error('fuel-calc.css already contains the target-laps rule — patch already applied?');
+  return src + rule;
+}
+
+// Fuel Calculator's settings panel exists twice — the widget's own standalone settings.html,
+// and an embedded copy inside the main settings window (racing-overlay/settings/fuel-calc.html)
+// — with different indentation levels, so each needs its own anchor text.
+function patchFuelCalcSettingsHtml(src) {
+  return mustReplace(
+    src,
+    '\t\t\t\t\t<!-- custom -->\r\n\t\t\t\t\t<div class="form-group">\r\n\t\t\t\t\t\t<label for="inputFuelCalcCustom" class="col-sm-3 control-label">Custom</label>',
+    '\t\t\t\t\t<!-- target laps -->\r\n\t\t\t\t\t<div class="form-group">\r\n\t\t\t\t\t\t<label for="inputFuelCalcTargetLaps" class="col-sm-3 control-label">Target Laps</label>\r\n\t\t\t\t\t\t<div class="col-sm-9">\r\n\t\t\t\t\t\t\t<div class="checkbox">\r\n\t\t\t\t\t\t\t\t<label>\r\n\t\t\t\t\t\t\t\t\t<input ng-model="settings.showTargetLaps" ng-change="saveSettings()" type="checkbox" id="inputFuelCalcTargetLaps">\r\n\t\t\t\t\t\t\t\t\tShow fuel-per-lap targets for laps around your current average pace\r\n\t\t\t\t\t\t\t\t</label>\r\n\t\t\t\t\t\t\t</div>\r\n\t\t\t\t\t\t</div>\r\n\t\t\t\t\t</div>\r\n\t\t\t\t\t<!-- custom -->\r\n\t\t\t\t\t<div class="form-group">\r\n\t\t\t\t\t\t<label for="inputFuelCalcCustom" class="col-sm-3 control-label">Custom</label>',
+    'fuel-calc/settings.html target-laps toggle'
+  );
+}
+
+function patchRacingOverlayFuelCalcSettingsHtml(src) {
+  return mustReplace(
+    src,
+    '\t\t<!-- custom -->\r\n\t\t<div class="form-group">\r\n\t\t\t<label for="inputFuelCalcCustom" class="col-sm-3 control-label">Custom</label>',
+    '\t\t<!-- target laps -->\r\n\t\t<div class="form-group">\r\n\t\t\t<label for="inputFuelCalcTargetLaps" class="col-sm-3 control-label">Target Laps</label>\r\n\t\t\t<div class="col-sm-9">\r\n\t\t\t\t<div class="checkbox">\r\n\t\t\t\t\t<label>\r\n\t\t\t\t\t\t<input ng-model="settings.showTargetLaps" ng-change="saveSettings()" type="checkbox" id="inputFuelCalcTargetLaps">\r\n\t\t\t\t\t\tShow fuel-per-lap targets for laps around your current average pace\r\n\t\t\t\t\t</label>\r\n\t\t\t\t</div>\r\n\t\t\t</div>\r\n\t\t</div>\r\n\t\t<!-- custom -->\r\n\t\t<div class="form-group">\r\n\t\t\t<label for="inputFuelCalcCustom" class="col-sm-3 control-label">Custom</label>',
+    'racing-overlay/settings/fuel-calc.html target-laps toggle'
+  );
 }
 
 // index.js is Kapps' actual Electron main process (window creation, opening layers) — a
@@ -310,6 +640,10 @@ function main() {
     relativesIndexHtml: overlayBase + 'relatives/index.html',
     relativesCss: overlayBase + 'relatives/relatives.css',
     relativesSettingsHtml: overlayBase + 'settings/relatives.html',
+    fuelCalcHtml: 'apps/server/fuel-calc/fuel-calc.html',
+    fuelCalcCss: 'apps/server/fuel-calc/fuel-calc.css',
+    fuelCalcSettingsHtml: 'apps/server/fuel-calc/settings.html',
+    racingOverlayFuelCalcSettingsHtml: overlayBase + 'settings/fuel-calc.html',
   };
   // Other overlay bundles that each carry their own copy of the shared widget-registry
   // module (defaultSettings/urlKeys for every widget, including driver.columns) — these
@@ -330,25 +664,73 @@ function main() {
     if (!files[p]) throw new Error(`Expected file not found in archive: ${p}`);
   }
 
-  files[paths.worker] = Buffer.from(patchWorker(files[paths.worker].toString('utf8')), 'utf8');
-  files[paths.standingsJs] = Buffer.from(patchStandingsJs(files[paths.standingsJs].toString('utf8')), 'utf8');
-  files[paths.indexHtml] = Buffer.from(patchIndexHtml(files[paths.indexHtml].toString('utf8')), 'utf8');
-  files[paths.standingsCss] = Buffer.from(patchStandingsCss(files[paths.standingsCss].toString('utf8')), 'utf8');
-  files[paths.settingsJs] = Buffer.from(patchSettingsJs(files[paths.settingsJs].toString('utf8')), 'utf8');
-  files[paths.settingsCss] = Buffer.from(patchSettingsCss(files[paths.settingsCss].toString('utf8')), 'utf8');
-  files[paths.racingOverlay] = Buffer.from(patchDefaultColumns(patchRelativesSharedSettings(files[paths.racingOverlay].toString('utf8'), 'racing-overlay.js'), 'racing-overlay.js'), 'utf8');
-  files[paths.mainProcess] = Buffer.from(patchRelativesSharedSettings(patchMainProcessJs(files[paths.mainProcess].toString('utf8')), 'index.js'), 'utf8');
-  files[paths.appJs] = Buffer.from(patchRelativesSharedSettings(files[paths.appJs].toString('utf8'), 'app.js'), 'utf8');
-  files[paths.fuelCalcJs] = Buffer.from(patchRelativesSharedSettings(files[paths.fuelCalcJs].toString('utf8'), 'fuel-calc.js'), 'utf8');
-  files[paths.relativesJs] = Buffer.from(patchRelativesJs(files[paths.relativesJs].toString('utf8')), 'utf8');
+  // worker.js and standings.js were previously missing the Relatives-feature's shared
+  // showCountryFlag defaultSettings/urlKeys entries (patchRelativesSharedSettings was never
+  // chained into either) — a pre-existing gap independent of today's Fastest Lap/target-laps
+  // work, fixed here alongside it.
+  files[paths.worker] = Buffer.from(
+    patchTargetLapsSharedSettings(
+      patchRelativesSharedSettings(patchWorkerFastestLap(patchWorker(files[paths.worker].toString('utf8'))), 'worker.js'),
+      'worker.js'
+    ),
+    'utf8'
+  );
+  files[paths.standingsJs] = Buffer.from(
+    patchTargetLapsSharedSettings(
+      patchRelativesSharedSettings(patchStandingsJsFastestLap(patchStandingsJs(files[paths.standingsJs].toString('utf8'))), 'standings.js'),
+      'standings.js'
+    ),
+    'utf8'
+  );
+  files[paths.indexHtml] = Buffer.from(patchIndexHtmlFastestLap(patchIndexHtml(files[paths.indexHtml].toString('utf8'))), 'utf8');
+  files[paths.standingsCss] = Buffer.from(patchStandingsCssFastestLap(patchStandingsCss(files[paths.standingsCss].toString('utf8'))), 'utf8');
+  // settings.js also carries the same dead-weight shared-registry duplication (it doesn't use
+  // driver.columns/showCountryFlag for anything itself, but the webpack bundle embeds a copy
+  // regardless) — was never getting patchDefaultColumns/patchRelativesSharedSettings either.
+  files[paths.settingsJs] = Buffer.from(
+    patchTargetLapsSharedSettings(
+      patchRelativesSharedSettings(patchDefaultColumns(patchSettingsJsFastestLap(patchSettingsJs(files[paths.settingsJs].toString('utf8'))), 'settings.js'), 'settings.js'),
+      'settings.js'
+    ),
+    'utf8'
+  );
+  files[paths.settingsCss] = Buffer.from(patchSettingsCssFastestLap(patchSettingsCss(files[paths.settingsCss].toString('utf8'))), 'utf8');
+  files[paths.racingOverlay] = Buffer.from(
+    patchTargetLapsSharedSettings(patchDefaultColumns(patchRelativesSharedSettings(files[paths.racingOverlay].toString('utf8'), 'racing-overlay.js'), 'racing-overlay.js'), 'racing-overlay.js'),
+    'utf8'
+  );
+  files[paths.mainProcess] = Buffer.from(
+    patchTargetLapsSharedSettings(patchRelativesSharedSettings(patchMainProcessJs(files[paths.mainProcess].toString('utf8')), 'index.js'), 'index.js'),
+    'utf8'
+  );
+  files[paths.appJs] = Buffer.from(
+    patchTargetLapsSharedSettings(patchRelativesSharedSettings(files[paths.appJs].toString('utf8'), 'app.js'), 'app.js'),
+    'utf8'
+  );
+  files[paths.fuelCalcJs] = Buffer.from(
+    patchFuelCalcJs(patchTargetLapsSharedSettings(patchRelativesSharedSettings(files[paths.fuelCalcJs].toString('utf8'), 'fuel-calc.js'), 'fuel-calc.js')),
+    'utf8'
+  );
+  files[paths.relativesJs] = Buffer.from(
+    patchTargetLapsSharedSettings(patchRelativesJs(files[paths.relativesJs].toString('utf8')), 'relatives.js'),
+    'utf8'
+  );
   files[paths.relativesIndexHtml] = Buffer.from(patchRelativesIndexHtml(files[paths.relativesIndexHtml].toString('utf8')), 'utf8');
   files[paths.relativesCss] = Buffer.from(patchRelativesCss(files[paths.relativesCss].toString('utf8')), 'utf8');
   files[paths.relativesSettingsHtml] = Buffer.from(patchRelativesSettingsHtml(files[paths.relativesSettingsHtml].toString('utf8')), 'utf8');
+  files[paths.fuelCalcHtml] = Buffer.from(patchFuelCalcHtml(files[paths.fuelCalcHtml].toString('utf8')), 'utf8');
+  files[paths.fuelCalcCss] = Buffer.from(patchFuelCalcCss(files[paths.fuelCalcCss].toString('utf8')), 'utf8');
+  files[paths.fuelCalcSettingsHtml] = Buffer.from(patchFuelCalcSettingsHtml(files[paths.fuelCalcSettingsHtml].toString('utf8')), 'utf8');
+  files[paths.racingOverlayFuelCalcSettingsHtml] = Buffer.from(
+    patchRacingOverlayFuelCalcSettingsHtml(files[paths.racingOverlayFuelCalcSettingsHtml].toString('utf8')),
+    'utf8'
+  );
 
   for (const p of otherWidgetPaths) {
     let content = files[p].toString('utf8');
     content = patchDefaultColumns(content, p);
     content = patchRelativesSharedSettings(content, p);
+    content = patchTargetLapsSharedSettings(content, p);
     files[p] = Buffer.from(content, 'utf8');
   }
 
