@@ -38,9 +38,9 @@ Whichever driver currently holds the fastest lap **within their own class** (GT3
 
 ![Standings with the Fastest Lap column, one driver highlighted purple](images/live-standings-fastest-lap.png)
 
-Since a fastest lap in Practice is often not that meaningful, the column's settings popup (click/hover the column in the settings editor) has a "Hide in Practice" checkbox — when enabled, the column stays blank during Practice sessions and shows normally again in Qualify and Race:
+Since a fastest lap in Practice or Qualify is often not that meaningful, the column's settings popup (click/hover the column in the settings editor) has a "Hide in P&Q" checkbox — when enabled, the column stays blank during Practice and any type of Qualify session, and shows normally again in Race:
 
-![Standings settings popup with the Hide in Practice checkbox](images/settings-editor-hide-fastest-lap.png)
+![Standings settings popup with the Hide in P&Q checkbox](images/settings-editor-hide-fastest-lap.png)
 
 ## Target Laps and Avg 5 (Fuel Calculator)
 

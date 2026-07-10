@@ -223,42 +223,35 @@ function patchWorkerFastestLap(src) {
   src = mustReplace(
     src,
     '"isPBLapTime","isBestLapTime","tyreCompound","joker","gainHistory"',
-    '"isPBLapTime","isBestLapTime","fastestLap","isPractice","tyreCompound","joker","gainHistory"',
+    '"isPBLapTime","isBestLapTime","fastestLap","tyreCompound","joker","gainHistory"',
     'worker.js mainKeys fastestLap'
   );
   src = mustReplace(
     src,
     'i.isBestLapTime=null,i.tyreCompound=null',
-    'i.isBestLapTime=null,i.fastestLap=null,i.isPractice=null,i.tyreCompound=null',
+    'i.isBestLapTime=null,i.fastestLap=null,i.tyreCompound=null',
     'worker.js reset fastestLap'
   );
-  // lapTime/gap/int are computed independently across three session-state branches, each
-  // reading from a different source field — fastestLap needs adding to all three or it
-  // silently never populates outside of Race sessions. Alongside it, isPractice records
-  // whether the CURRENT tick is a Practice session, for the "Hide in Practice" setting below.
-  //
-  // Branch 1 (guarded by the Race-results check) and branch 3 (guarded by
-  // Q.isRaceStarted===true — an early-race fallback that still has stale qualify-position
-  // data available) are both Race-context and never Practice. Branch 2 (guarded by
-  // !Q.isRaceStarted) is shared by BOTH Qualify and Practice — matching the settings UI's
-  // combined "p&q" precision bucket — so isPractice there must be read from the actual
-  // SessionType string rather than hardcoded.
+  // lapTime/gap/int are computed independently across three session-state branches (Race,
+  // a shared Qualify+Practice branch, and an early-race fallback branch), each reading from a
+  // different source field — fastestLap needs adding to all three or it silently never
+  // populates outside of Race sessions.
   src = mustReplace(
     src,
     'l.lapTime=u?.001*(1e3*B.LastTime|0):null,B.LapsComplete>1&&(g=B.FastestLap===B.LapsComplete)',
-    'l.lapTime=u?.001*(1e3*B.LastTime|0):null,l.fastestLap=B.FastestTime>0?.001*(1e3*B.FastestTime|0):null,l.isPractice=!1,B.LapsComplete>1&&(g=B.FastestLap===B.LapsComplete)',
+    'l.lapTime=u?.001*(1e3*B.LastTime|0):null,l.fastestLap=B.FastestTime>0?.001*(1e3*B.FastestTime|0):null,B.LapsComplete>1&&(g=B.FastestLap===B.LapsComplete)',
     'worker.js race-branch fastestLap'
   );
   src = mustReplace(
     src,
     's&&u&&(l.lapTime=.001*(1e3*B.Time|0))),l.gapData.ppq=B,E.set(a,n))',
-    's&&u&&(l.lapTime=.001*(1e3*B.Time|0),l.fastestLap=B.FastestTime>0?.001*(1e3*B.FastestTime|0):null,l.isPractice="Practice"===_.SessionType)),l.gapData.ppq=B,E.set(a,n))',
+    's&&u&&(l.lapTime=.001*(1e3*B.Time|0),l.fastestLap=B.FastestTime>0?.001*(1e3*B.FastestTime|0):null)),l.gapData.ppq=B,E.set(a,n))',
     'worker.js qualify/practice-branch fastestLap'
   );
   src = mustReplace(
     src,
     'l.lapTime=o>0?o:null,C.WeekendInfo.HeatRacing',
-    'l.lapTime=o>0?o:null,l.fastestLap=B.FastestTime>0?.001*(1e3*B.FastestTime|0):null,l.isPractice=!1,C.WeekendInfo.HeatRacing',
+    'l.lapTime=o>0?o:null,l.fastestLap=B.FastestTime>0?.001*(1e3*B.FastestTime|0):null,C.WeekendInfo.HeatRacing',
     'worker.js early-race-branch fastestLap'
   );
   return src;
@@ -275,19 +268,22 @@ function patchStandingsJsFastestLap(src) {
     'standings.js settings.driver.fastestLap backfill'
   );
   // Format the raw value into the hidden "fake" element, same pattern as lapTime. Also hide
-  // the value (same "hidden" toggle other conditionally-shown columns use) when there's no
-  // value OR the user has "Hide in Practice" on and we're in a practice session.
+  // the value (same "hidden" toggle other conditionally-shown columns use) when the user has
+  // "Hide in P&Q" on and the CURRENT column is in its "pandq" precision bucket — reusing the
+  // exact same bucket (`_`, just computed above for the precision lookup) rather than a
+  // separate per-driver fact, since "Practice + every Qualify type" IS that bucket.
   src = mustReplace(
     src,
     'this.dataContentEls.has("lapTime")&&this.data._apply.lapTime&&([I,C,r]=this.getApplyData("lapTime"),null!=I?(_=h.sessionData.isRaceStarted?"race":"pandq",x=function(){if(I>=599.95)return 1;switch(l.settings.driver.lapTime[_].precision){case"fractions-3":return 3;case"fractions-2":return 2;case"fractions-1":return 1}}(),r.textContent=p(I,x)):r.textContent="",r.classList.toggle("hidden",null==I)),this.dataContentEls.has("tyreCompound")',
-    'this.dataContentEls.has("lapTime")&&this.data._apply.lapTime&&([I,C,r]=this.getApplyData("lapTime"),null!=I?(_=h.sessionData.isRaceStarted?"race":"pandq",x=function(){if(I>=599.95)return 1;switch(l.settings.driver.lapTime[_].precision){case"fractions-3":return 3;case"fractions-2":return 2;case"fractions-1":return 1}}(),r.textContent=p(I,x)):r.textContent="",r.classList.toggle("hidden",null==I)),this.dataContentEls.has("fastestLap")&&this.data._apply.fastestLap&&([I,C,r]=this.getApplyData("fastestLap"),null!=I?(_=h.sessionData.isRaceStarted?"race":"pandq",x=function(){if(I>=599.95)return 1;switch((l.settings.driver.fastestLap&&l.settings.driver.fastestLap[_]&&l.settings.driver.fastestLap[_].precision)||"fractions-3"){case"fractions-3":return 3;case"fractions-2":return 2;case"fractions-1":return 1}}(),r.textContent=p(I,x)):r.textContent="",r.classList.toggle("hidden",null==I||this.data.isPractice&&l.settings.driver.fastestLap&&l.settings.driver.fastestLap.hideInPractice)),this.dataContentEls.has("tyreCompound")',
+    'this.dataContentEls.has("lapTime")&&this.data._apply.lapTime&&([I,C,r]=this.getApplyData("lapTime"),null!=I?(_=h.sessionData.isRaceStarted?"race":"pandq",x=function(){if(I>=599.95)return 1;switch(l.settings.driver.lapTime[_].precision){case"fractions-3":return 3;case"fractions-2":return 2;case"fractions-1":return 1}}(),r.textContent=p(I,x)):r.textContent="",r.classList.toggle("hidden",null==I)),this.dataContentEls.has("fastestLap")&&this.data._apply.fastestLap&&([I,C,r]=this.getApplyData("fastestLap"),null!=I?(_=h.sessionData.isRaceStarted?"race":"pandq",x=function(){if(I>=599.95)return 1;switch((l.settings.driver.fastestLap&&l.settings.driver.fastestLap[_]&&l.settings.driver.fastestLap[_].precision)||"fractions-3"){case"fractions-3":return 3;case"fractions-2":return 2;case"fractions-1":return 1}}(),r.textContent=p(I,x)):r.textContent="",r.classList.toggle("hidden",null==I||"pandq"===_&&l.settings.driver.fastestLap&&l.settings.driver.fastestLap.hideInPQ)),this.dataContentEls.has("tyreCompound")',
     'standings.js apply-block fastestLap'
   );
   // Reveal step: copies the formatted text from the hidden "fake" element into the visible
   // "real" sibling. Every column needing this has its own dedicated revealXXX(), dispatched
   // from revealAll() — a bare data pipeline with no reveal step just never displays anything.
   // The purple "fastest lap" fill is a separate reveal step keyed off this.style.bestLapTime —
-  // gate it too, so a hidden-in-practice cell doesn't show an empty purple box.
+  // gate it too, so a hidden-in-P&Q cell doesn't show an empty purple box. No `_` in scope
+  // here (separate method), so derive pandq/race the same way the apply-step originally does.
   src = mustReplace(
     src,
     'this.dataContentEls.has("lapTime")&&this.revealLapTime(),',
@@ -297,7 +293,7 @@ function patchStandingsJsFastestLap(src) {
   src = mustReplace(
     src,
     'async revealTyreCompound(){',
-    'async revealFastestLap(){if(this.data._reveal.fastestLap){var e=this.dataContentEls.get("fastestLap");e.nextElementSibling.textContent=e.textContent}this.data._reveal.isBestLapTime&&(this.style.bestLapTime=this.data.isBestLapTime&&!(this.data.isPractice&&l.settings.driver.fastestLap&&l.settings.driver.fastestLap.hideInPractice))}async revealTyreCompound(){',
+    'async revealFastestLap(){if(this.data._reveal.fastestLap){var e=this.dataContentEls.get("fastestLap");e.nextElementSibling.textContent=e.textContent}this.data._reveal.isBestLapTime&&(this.style.bestLapTime=this.data.isBestLapTime&&!(!h.sessionData.isRaceStarted&&l.settings.driver.fastestLap&&l.settings.driver.fastestLap.hideInPQ))}async revealTyreCompound(){',
     'standings.js revealFastestLap definition'
   );
   // standings.js carries its OWN independent copy of the widget's defaultSettings (same
@@ -309,7 +305,7 @@ function patchStandingsJsFastestLap(src) {
   src = mustReplace(
     src,
     'lapTime:{pandq:{precision:"fractions-3"},race:{precision:"fractions-1"}},pit:{style:"pit-time"}',
-    'lapTime:{pandq:{precision:"fractions-3"},race:{precision:"fractions-1"}},fastestLap:{pandq:{precision:"fractions-3"},race:{precision:"fractions-1"},hideInPractice:!1},pit:{style:"pit-time"}',
+    'lapTime:{pandq:{precision:"fractions-3"},race:{precision:"fractions-1"}},fastestLap:{pandq:{precision:"fractions-3"},race:{precision:"fractions-1"},hideInPQ:!1},pit:{style:"pit-time"}',
     'standings.js fastestLap defaultSettings'
   );
   return src;
@@ -378,22 +374,24 @@ function patchSettingsJsFastestLap(src) {
   );
 
   // 4) The P&Q/Race precision popup UI is a hardcoded switch(columnName). fastestLap gets its
-  //    own case (not a fall-through from lapTime) so it can carry an extra "Hide in Practice"
+  //    own case (not a fall-through from lapTime) so it can carry an extra "Hide in P&Q"
   //    checkbox that Last Lap Time has no equivalent need for — bound to
-  //    driver.fastestLap.hideInPractice via the same for-in/assignDataBind idiom the
-  //    tyreCompound "Always On" checkbox above already uses.
+  //    driver.fastestLap.hideInPQ via the same for-in/assignDataBind idiom the tyreCompound
+  //    "Always On" checkbox above already uses. "Hide in P&Q" hides the column for BOTH
+  //    Practice and every Qualify type (not Practice alone) — deliberately reusing the app's
+  //    own "p&q" precision bucket rather than distinguishing Practice from Qualify.
   src = mustReplace(
     src,
     'case"lapTime":(v=document.createElement("div")).classList.add("options",Be,M.className),te=this.createOptionContentPQR(b,Be,M,M,"pandq","precision"),(S=v.appendChild(document.createElement("header"))).textContent="p&q",te.prepend(S),v.appendChild(te),te=this.createOptionContentPQR(b,Be,M,M,"race","precision"),(S=v.appendChild(document.createElement("header"))).textContent="race",te.prepend(S),v.appendChild(te);break',
-    'case"lapTime":(v=document.createElement("div")).classList.add("options",Be,M.className),te=this.createOptionContentPQR(b,Be,M,M,"pandq","precision"),(S=v.appendChild(document.createElement("header"))).textContent="p&q",te.prepend(S),v.appendChild(te),te=this.createOptionContentPQR(b,Be,M,M,"race","precision"),(S=v.appendChild(document.createElement("header"))).textContent="race",te.prepend(S),v.appendChild(te);break;case"fastestLap":(v=document.createElement("div")).classList.add("options",Be,M.className),te=this.createOptionContentPQR(b,Be,M,M,"pandq","precision"),(S=v.appendChild(document.createElement("header"))).textContent="p&q",te.prepend(S),v.appendChild(te),te=this.createOptionContentPQR(b,Be,M,M,"race","precision"),(S=v.appendChild(document.createElement("header"))).textContent="race",te.prepend(S),v.appendChild(te);for(t in(te=v.appendChild(document.createElement("div"))).classList.add("form"),E=te.appendChild(document.createElement("input")),Re={type:"checkbox",id:k=`${Be}.${M.name}.hideInPractice`,"data-bind":k})n=Re[t],E.setAttribute(t,n);(L=te.appendChild(document.createElement("label"))).textContent="Hide in Practice",L.htmlFor=E.id,this.assignDataBind(E);break',
-    'settings.js fastestLap popup case + hideInPractice checkbox'
+    'case"lapTime":(v=document.createElement("div")).classList.add("options",Be,M.className),te=this.createOptionContentPQR(b,Be,M,M,"pandq","precision"),(S=v.appendChild(document.createElement("header"))).textContent="p&q",te.prepend(S),v.appendChild(te),te=this.createOptionContentPQR(b,Be,M,M,"race","precision"),(S=v.appendChild(document.createElement("header"))).textContent="race",te.prepend(S),v.appendChild(te);break;case"fastestLap":(v=document.createElement("div")).classList.add("options",Be,M.className),te=this.createOptionContentPQR(b,Be,M,M,"pandq","precision"),(S=v.appendChild(document.createElement("header"))).textContent="p&q",te.prepend(S),v.appendChild(te),te=this.createOptionContentPQR(b,Be,M,M,"race","precision"),(S=v.appendChild(document.createElement("header"))).textContent="race",te.prepend(S),v.appendChild(te);for(t in(te=v.appendChild(document.createElement("div"))).classList.add("form"),E=te.appendChild(document.createElement("input")),Re={type:"checkbox",id:k=`${Be}.${M.name}.hideInPQ`,"data-bind":k})n=Re[t],E.setAttribute(t,n);(L=te.appendChild(document.createElement("label"))).textContent="Hide in P&Q",L.htmlFor=E.id,this.assignDataBind(E);break',
+    'settings.js fastestLap popup case + hideInPQ checkbox'
   );
 
   // 5) defaultSettings entry.
   src = mustReplace(
     src,
     'lapTime:{pandq:{precision:"fractions-3"},race:{precision:"fractions-1"}},pit:{style:"pit-time"}',
-    'lapTime:{pandq:{precision:"fractions-3"},race:{precision:"fractions-1"}},fastestLap:{pandq:{precision:"fractions-3"},race:{precision:"fractions-1"},hideInPractice:!1},pit:{style:"pit-time"}',
+    'lapTime:{pandq:{precision:"fractions-3"},race:{precision:"fractions-1"}},fastestLap:{pandq:{precision:"fractions-3"},race:{precision:"fractions-1"},hideInPQ:!1},pit:{style:"pit-time"}',
     'settings.js fastestLap defaultSettings'
   );
 
@@ -434,9 +432,21 @@ function patchSettingsCssFastestLap(src) {
   // keyed by className + precision variant — reusing lap-time's exact crop so it's visually
   // identical to it, then tinting purple (blend-mode, since the sprite crop is opaque and a
   // plain background-color would sit invisibly behind it) to distinguish the two at a glance.
-  const rule = '.atlas.driver.fastest-lap.precision-fractions-3{width:80px;height:25px;background-position:-347px -500px}.atlas.driver.fastest-lap.precision-fractions-2{width:71px;height:25px;background-position:-427px -500px}.atlas.driver.fastest-lap.precision-fractions-1{width:63px;height:25px;background-position:0 -525px}.atlas.driver.fastest-lap{background-color:#8b3ef2;background-blend-mode:multiply}';
-  if (src.includes(rule)) throw new Error('settings.css already contains the fastest-lap atlas rule — patch already applied?');
-  return src + rule;
+  const atlasRule = '.atlas.driver.fastest-lap.precision-fractions-3{width:80px;height:25px;background-position:-347px -500px}.atlas.driver.fastest-lap.precision-fractions-2{width:71px;height:25px;background-position:-427px -500px}.atlas.driver.fastest-lap.precision-fractions-1{width:63px;height:25px;background-position:0 -525px}.atlas.driver.fastest-lap{background-color:#8b3ef2;background-blend-mode:multiply}';
+  if (src.includes(atlasRule)) throw new Error('settings.css already contains the fastest-lap atlas rule — patch already applied?');
+  src += atlasRule;
+
+  // The P&Q/Race precision popup itself had no .options.driver.fastest-lap layout rule at
+  // all, so without this it falls back to default block stacking (P&Q above RACE) instead of
+  // matching Last Lap Time's side-by-side P&Q | RACE columns. Mirrors lap-time's own rules,
+  // then adds a rule so the "Hide in P&Q" checkbox (a 3rd direct child of the same flex
+  // container) wraps onto its own full-width row below both columns, left-aligned under P&Q.
+  const layoutRule =
+    '.options.driver.fastest-lap{display:flex;flex-wrap:wrap;gap:10px}' +
+    '.options.driver.fastest-lap>.precision{display:flex;flex-direction:column;gap:2px}' +
+    '.options.driver.fastest-lap>.form{flex-basis:100%;justify-content:flex-start;margin-top:4px}';
+  if (src.includes(layoutRule)) throw new Error('settings.css already contains the fastest-lap popup layout rule — patch already applied?');
+  return src + layoutRule;
 }
 
 // --- Fuel Calculator target laps -----------------------------------------------------------
