@@ -5,6 +5,7 @@ A community patch for [Kapps](https://kapps.kutu.ru), the iRacing overlay app wh
 - **Country flags** next to each driver in **Standings** and **Relatives**
 - A **Fastest Lap column** in **Standings**, highlighting whoever holds the fastest lap within their own class
 - A **Target Laps** row in the **Fuel Calculator**, showing the fuel-per-lap needed for a couple of laps around your current pace
+- An **Avg 5** row in the **Fuel Calculator**, showing a simple average of your fuel usage over the last 5 laps
 
 ## Country flags
 
@@ -37,11 +38,16 @@ Whichever driver currently holds the fastest lap **within their own class** (GT3
 
 ![Standings with the Fastest Lap column, one driver highlighted purple](images/live-standings-fastest-lap.png)
 
-## Target Laps (Fuel Calculator)
+## Target Laps and Avg 5 (Fuel Calculator)
 
-A new row at the bottom of the Fuel Calculator overlay showing the fuel-per-lap needed for the lap you're on pace for, plus one lap on either side — so you can see at a glance what adjusting your pace by a lap or two would cost or save in fuel. Toggled on via a new "Target Laps" checkbox in the Fuel Calculator's settings, placed above "Custom".
+Two new rows in the Fuel Calculator overlay:
 
-![Fuel Calculator with the Target Laps row](images/fuel-target.png)
+- **Target Laps**, at the bottom of the overlay, shows the fuel-per-lap needed for the lap you're on pace for, plus one lap on either side — so you can see at a glance what adjusting your pace by a lap or two would cost or save in fuel. Toggled on via a "Target Laps" checkbox in the Fuel Calculator's settings, placed above "Custom".
+- **Avg 5**, next to the built-in "Average" row, is a simple (non-trimmed) average of your fuel usage over the last 5 laps — useful right after a pace change, when Kapps' own trimmed-average "Average" row is still catching up. Toggled on via an "Avg 5" checkbox, placed above "Target Laps".
+
+![Fuel Calculator with the Avg 5 row and Target Laps row](images/fuel-target.png)
+
+![Fuel Calculator settings showing the Avg 5 and Target Laps checkboxes](images/fuel-settings.png)
 
 ## How it works
 
@@ -59,7 +65,7 @@ This script modifies a file inside your own local Kapps installation. It is not 
 2. Download `apply-country-flags-patch.bat` and `kapps-country-flags-patch.js` and put them **in the same folder** together (anywhere — Desktop, Downloads, wherever).
 3. Double-click `apply-country-flags-patch.bat`.
 4. It will locate your Kapps install automatically, back up the original file, and apply the patch. Follow the on-screen prompts.
-5. Relaunch Kapps. Open the Standings overlay during a session to see flags; open Standings' settings → Driver tab to see the draggable `Country Flag` and `Fastest Lap` columns. For Relatives, open its settings page and enable the new "Country Flag" checkbox (found right after "Car Number"). For the Fuel Calculator, open its settings and enable "Target Laps" (found above "Custom").
+5. Relaunch Kapps. Open the Standings overlay during a session to see flags; open Standings' settings → Driver tab to see the draggable `Country Flag` and `Fastest Lap` columns. For Relatives, open its settings page and enable the new "Country Flag" checkbox (found right after "Car Number"). For the Fuel Calculator, open its settings and enable "Avg 5" and/or "Target Laps" (found above "Custom").
 
 ### Running it manually instead of the `.bat`
 

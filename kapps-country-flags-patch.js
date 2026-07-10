@@ -474,11 +474,72 @@ function patchFuelCalcJs(src) {
     '$scope.showLast=config.showLast,$scope.showTargetLaps=config.showTargetLaps,$scope.showCustom=config.showCustom',
     'fuel-calc.js AppCtrl showTargetLaps scope copy'
   );
+
+  // "Avg 5" row: a SIMPLE (non-trimmed) mean of the last 5 laps, matching irdashies'
+  // calculateSimpleAverage — distinct from Kapps' own "Average" row, which drops the best
+  // and worst lap before averaging. Reuses the SAME rolling 5-lap `fuels` array Kapps already
+  // maintains for that trimmed mean, so no new state tracking is needed — just a second,
+  // simpler reduction over the same data, computed right alongside the existing usageAvg calc.
+  src = mustReplace(
+    src,
+    'fuels.length&&((f=fuels.slice()).length>=3&&(f=f.sort().slice(1,-1)),total=f.reduce((function(a,b){return a+b})),scope.usageAvg=total/f.length)',
+    'fuels.length&&(scope.usageAvg5=fuels.reduce((function(a,b){return a+b}),0)/fuels.length,(f=fuels.slice()).length>=3&&(f=f.sort().slice(1,-1)),total=f.reduce((function(a,b){return a+b})),scope.usageAvg=total/f.length)',
+    'fuel-calc.js usageAvg5 computation'
+  );
+  src = mustReplace(
+    src,
+    'null!=scope.usageQualy&&(scope.remainQualy=curFuelLevel/scope.usageQualy),null!=scope.usageLast&&(scope.remainLast=curFuelLevel/scope.usageLast)',
+    'null!=scope.usageQualy&&(scope.remainQualy=curFuelLevel/scope.usageQualy),null!=scope.usageAvg5&&(scope.remainAvg5=curFuelLevel/scope.usageAvg5),null!=scope.usageLast&&(scope.remainLast=curFuelLevel/scope.usageLast)',
+    'fuel-calc.js remainAvg5 computation'
+  );
+  src = mustReplace(
+    src,
+    'null!=scope.usageQualy&&(scope.refuelQualy=(lapsLeft-scope.remainQualy)*scope.usageQualy,scope.refuelQualy>=1&&(scope.refuelQualy+=.5)),null!=scope.usageLast&&(scope.refuelLast=(lapsLeft-scope.remainLast)*scope.usageLast,scope.refuelLast>=1&&(scope.refuelLast+=.5))',
+    'null!=scope.usageQualy&&(scope.refuelQualy=(lapsLeft-scope.remainQualy)*scope.usageQualy,scope.refuelQualy>=1&&(scope.refuelQualy+=.5)),null!=scope.usageAvg5&&(scope.refuelAvg5=(lapsLeft-scope.remainAvg5)*scope.usageAvg5,scope.refuelAvg5>=1&&(scope.refuelAvg5+=.5)),null!=scope.usageLast&&(scope.refuelLast=(lapsLeft-scope.remainLast)*scope.usageLast,scope.refuelLast>=1&&(scope.refuelLast+=.5))',
+    'fuel-calc.js refuelAvg5 computation'
+  );
+  src = mustReplace(
+    src,
+    'case 0:if(null!=scope.usageAvg&&(scope.extraAvg=scope.refuelAvg-scope.usageAvg),null!=scope.usageQualy&&(scope.extraQualy=scope.refuelQualy-scope.usageQualy),null!=scope.usageLast&&(scope.extraLast=scope.refuelLast-scope.usageLast)',
+    'case 0:if(null!=scope.usageAvg&&(scope.extraAvg=scope.refuelAvg-scope.usageAvg),null!=scope.usageQualy&&(scope.extraQualy=scope.refuelQualy-scope.usageQualy),null!=scope.usageAvg5&&(scope.extraAvg5=scope.refuelAvg5-scope.usageAvg5),null!=scope.usageLast&&(scope.extraLast=scope.refuelLast-scope.usageLast)',
+    'fuel-calc.js extraAvg5 case 0'
+  );
+  src = mustReplace(
+    src,
+    'case 1:if(null!=scope.usageAvg&&(scope.extraAvg=scope.refuelAvg+scope.usageAvg),null!=scope.usageQualy&&(scope.extraQualy=scope.refuelQualy+scope.usageQualy),null!=scope.usageLast&&(scope.extraLast=scope.refuelLast+scope.usageLast)',
+    'case 1:if(null!=scope.usageAvg&&(scope.extraAvg=scope.refuelAvg+scope.usageAvg),null!=scope.usageQualy&&(scope.extraQualy=scope.refuelQualy+scope.usageQualy),null!=scope.usageAvg5&&(scope.extraAvg5=scope.refuelAvg5+scope.usageAvg5),null!=scope.usageLast&&(scope.extraLast=scope.refuelLast+scope.usageLast)',
+    'fuel-calc.js extraAvg5 case 1'
+  );
+  src = mustReplace(
+    src,
+    'null!=scope.usageAvg&&(scope.extraAvg=(scope.remainAvg-lapsLeft)*scope.usageAvg,scope.extraAvg>=-2&&(fuelOnPit=0),scope.extraAvg=Math.max(0,scope.extraAvg+fuelOnPit)),null!=scope.usageQualy&&(scope.extraQualy=Math.max(0,(scope.remainQualy-lapsLeft)*scope.usageQualy+fuelOnPit)),null!=scope.usageLast&&(scope.extraLast=Math.max(0,(scope.remainLast-lapsLeft)*scope.usageLast+fuelOnPit))',
+    'null!=scope.usageAvg&&(scope.extraAvg=(scope.remainAvg-lapsLeft)*scope.usageAvg,scope.extraAvg>=-2&&(fuelOnPit=0),scope.extraAvg=Math.max(0,scope.extraAvg+fuelOnPit)),null!=scope.usageQualy&&(scope.extraQualy=Math.max(0,(scope.remainQualy-lapsLeft)*scope.usageQualy+fuelOnPit)),null!=scope.usageAvg5&&(scope.extraAvg5=Math.max(0,(scope.remainAvg5-lapsLeft)*scope.usageAvg5+fuelOnPit)),null!=scope.usageLast&&(scope.extraLast=Math.max(0,(scope.remainLast-lapsLeft)*scope.usageLast+fuelOnPit))',
+    'fuel-calc.js extraAvg5 case 2'
+  );
+  src = mustReplace(
+    src,
+    'usageAvg:null,usageQualy:null,usageLast:null,usageCustom:null,remainAvg:null,remainQualy:null,remainLast:null,remainCustom:null,refuelAvg:null,refuelQualy:null,refuelLast:null,refuelCustom:null',
+    'usageAvg:null,usageQualy:null,usageAvg5:null,usageLast:null,usageCustom:null,remainAvg:null,remainQualy:null,remainAvg5:null,remainLast:null,remainCustom:null,refuelAvg:null,refuelQualy:null,refuelAvg5:null,refuelLast:null,refuelCustom:null',
+    'fuel-calc.js dataEmpty avg5'
+  );
+  src = mustReplace(
+    src,
+    'extraMode:2,extraAvg:null,extraQualy:null,extraLast:null,extraCustom',
+    'extraMode:2,extraAvg:null,extraQualy:null,extraAvg5:null,extraLast:null,extraCustom',
+    'fuel-calc.js dataEmpty extraAvg5'
+  );
+  src = mustReplace(
+    src,
+    '$scope.showQualy=config.showQualy,$scope.showLast=config.showLast,$scope.showTargetLaps=config.showTargetLaps',
+    '$scope.showQualy=config.showQualy,$scope.showAvg5=config.showAvg5,$scope.showLast=config.showLast,$scope.showTargetLaps=config.showTargetLaps',
+    'fuel-calc.js AppCtrl showAvg5 scope copy'
+  );
+
   return src;
 }
 
 function patchFuelCalcHtml(src) {
-  const newRow =
+  const targetLapsRow =
     '\t\t\t\t<div ng-if="showTargetLaps && fuelCalc.targetLapsA" class="cell target-laps">\r\n' +
     '\t\t\t\t\t<div class="header">L{{ fuelCalc.targetLapsA }}</div>\r\n' +
     '\t\t\t\t\t<div fuel-calc-value="targetFuelA" class="value"></div>\r\n' +
@@ -491,39 +552,105 @@ function patchFuelCalcHtml(src) {
     '\t\t\t\t\t<div class="header">L{{ fuelCalc.targetLapsC }}</div>\r\n' +
     '\t\t\t\t\t<div fuel-calc-value="targetFuelC" class="value"></div>\r\n' +
     '\t\t\t\t</div>\r\n';
-  return mustReplace(
+  src = mustReplace(
     src,
     '\t\t\t\t<div ng-if="showCustom" class="cell custom">\r\n\t\t\t\t\t<div fuel-calc-value="extraCustom" class="value"></div>\r\n\t\t\t\t</div>\r\n\r\n\t\t\t</div>',
-    '\t\t\t\t<div ng-if="showCustom" class="cell custom">\r\n\t\t\t\t\t<div fuel-calc-value="extraCustom" class="value"></div>\r\n\t\t\t\t</div>\r\n\r\n' + newRow + '\r\n\t\t\t</div>',
+    '\t\t\t\t<div ng-if="showCustom" class="cell custom">\r\n\t\t\t\t\t<div fuel-calc-value="extraCustom" class="value"></div>\r\n\t\t\t\t</div>\r\n\r\n' + targetLapsRow + '\r\n\t\t\t</div>',
     'fuel-calc.html target-laps row'
   );
+
+  // "Avg 5" row, placed right after "Average" (before "Qualify") — a natural reading position
+  // since it's directly comparable to Average, just with a different averaging window.
+  const avg5Row =
+    '\t\t\t\t<div ng-if="showAvg5" class="cell avg5">\r\n' +
+    '\t\t\t\t\t<div class="header">Avg 5</div>\r\n' +
+    '\t\t\t\t\t<div fuel-calc-value="usageAvg5" class="value"></div>\r\n' +
+    '\t\t\t\t</div>\r\n' +
+    '\t\t\t\t<div ng-if="showAvg5" class="cell avg5">\r\n' +
+    '\t\t\t\t\t<div fuel-calc-value="remainAvg5" class="value"></div>\r\n' +
+    '\t\t\t\t</div>\r\n' +
+    '\t\t\t\t<div ng-if="showAvg5" class="cell avg5">\r\n' +
+    '\t\t\t\t\t<div fuel-calc-value="refuelAvg5" class="value"></div>\r\n' +
+    '\t\t\t\t</div>\r\n' +
+    '\t\t\t\t<div ng-if="showAvg5" class="cell avg5">\r\n' +
+    '\t\t\t\t\t<div fuel-calc-value="extraAvg5" class="value"></div>\r\n' +
+    '\t\t\t\t</div>\r\n\r\n';
+  src = mustReplace(
+    src,
+    '\t\t\t\t<div class="cell avg">\r\n\t\t\t\t\t<div ng-click="toggleExtraMode()" class="header clickable">\r\n\t\t\t\t\t\t<span ng-if="fuelCalc.extraMode == 0">Refuel -1L</span>\r\n\t\t\t\t\t\t<span ng-if="fuelCalc.extraMode == 1">Refuel +1L</span>\r\n\t\t\t\t\t\t<span ng-if="fuelCalc.extraMode == 2">Fuel at End</span>\r\n\t\t\t\t\t</div>\r\n\t\t\t\t\t<div fuel-calc-value="extraAvg" class="value"></div>\r\n\t\t\t\t</div>\r\n\r\n\t\t\t\t<div ng-if="showQualy" class="cell qualy">',
+    '\t\t\t\t<div class="cell avg">\r\n\t\t\t\t\t<div ng-click="toggleExtraMode()" class="header clickable">\r\n\t\t\t\t\t\t<span ng-if="fuelCalc.extraMode == 0">Refuel -1L</span>\r\n\t\t\t\t\t\t<span ng-if="fuelCalc.extraMode == 1">Refuel +1L</span>\r\n\t\t\t\t\t\t<span ng-if="fuelCalc.extraMode == 2">Fuel at End</span>\r\n\t\t\t\t\t</div>\r\n\t\t\t\t\t<div fuel-calc-value="extraAvg" class="value"></div>\r\n\t\t\t\t</div>\r\n\r\n' + avg5Row + '\t\t\t\t<div ng-if="showQualy" class="cell qualy">',
+    'fuel-calc.html avg5 row'
+  );
+
+  return src;
 }
 
 function patchFuelCalcCss(src) {
   const rule = 'body>#app>.app>.wrap>.cell.target-laps.current{color:#4caf50}';
   if (src.includes(rule)) throw new Error('fuel-calc.css already contains the target-laps rule — patch already applied?');
-  return src + rule;
+  src += rule;
+  // Avg 5 has no dedicated theme color of its own (that would need theme-editor UI changes
+  // well beyond this feature's scope) — reuses Average's color since it's directly related.
+  const avg5Rule = 'body>#app>.app>.wrap>.cell.avg5{color:var(--theme-average-color)}';
+  if (src.includes(avg5Rule)) throw new Error('fuel-calc.css already contains the avg5 rule — patch already applied?');
+  return src + avg5Rule;
 }
 
 // Fuel Calculator's settings panel exists twice — the widget's own standalone settings.html,
 // and an embedded copy inside the main settings window (racing-overlay/settings/fuel-calc.html)
 // — with different indentation levels, so each needs its own anchor text.
 function patchFuelCalcSettingsHtml(src) {
-  return mustReplace(
+  // Target Laps must be inserted BEFORE Avg 5, since Avg 5's anchor ends on the
+  // "<!-- target laps -->" comment that this insertion creates — on a fresh install neither
+  // exists yet, so this ordering is required (not just cosmetic).
+  src = mustReplace(
     src,
     '\t\t\t\t\t<!-- custom -->\r\n\t\t\t\t\t<div class="form-group">\r\n\t\t\t\t\t\t<label for="inputFuelCalcCustom" class="col-sm-3 control-label">Custom</label>',
     '\t\t\t\t\t<!-- target laps -->\r\n\t\t\t\t\t<div class="form-group">\r\n\t\t\t\t\t\t<label for="inputFuelCalcTargetLaps" class="col-sm-3 control-label">Target Laps</label>\r\n\t\t\t\t\t\t<div class="col-sm-9">\r\n\t\t\t\t\t\t\t<div class="checkbox">\r\n\t\t\t\t\t\t\t\t<label>\r\n\t\t\t\t\t\t\t\t\t<input ng-model="settings.showTargetLaps" ng-change="saveSettings()" type="checkbox" id="inputFuelCalcTargetLaps">\r\n\t\t\t\t\t\t\t\t\tShow fuel-per-lap targets for laps around your current average pace\r\n\t\t\t\t\t\t\t\t</label>\r\n\t\t\t\t\t\t\t</div>\r\n\t\t\t\t\t\t</div>\r\n\t\t\t\t\t</div>\r\n\t\t\t\t\t<!-- custom -->\r\n\t\t\t\t\t<div class="form-group">\r\n\t\t\t\t\t\t<label for="inputFuelCalcCustom" class="col-sm-3 control-label">Custom</label>',
     'fuel-calc/settings.html target-laps toggle'
   );
+  src = mustReplace(
+    src,
+    '\t\t\t\t\t\t\t\t\t<input ng-model="settings.showLast" ng-change="saveSettings()" type="checkbox" id="inputFuelCalcLast">\r\n\t\t\t\t\t\t\t\t\tShow last lap fuel usage and calculations\r\n\t\t\t\t\t\t\t\t</label>\r\n\t\t\t\t\t\t\t</div>\r\n\t\t\t\t\t\t</div>\r\n\t\t\t\t\t</div>\r\n\t\t\t\t\t<!-- target laps -->',
+    '\t\t\t\t\t\t\t\t\t<input ng-model="settings.showLast" ng-change="saveSettings()" type="checkbox" id="inputFuelCalcLast">\r\n\t\t\t\t\t\t\t\t\tShow last lap fuel usage and calculations\r\n\t\t\t\t\t\t\t\t</label>\r\n\t\t\t\t\t\t\t</div>\r\n\t\t\t\t\t\t</div>\r\n\t\t\t\t\t</div>\r\n\t\t\t\t\t<!-- avg 5 -->\r\n\t\t\t\t\t<div class="form-group">\r\n\t\t\t\t\t\t<label for="inputFuelCalcAvg5" class="col-sm-3 control-label">Avg 5</label>\r\n\t\t\t\t\t\t<div class="col-sm-9">\r\n\t\t\t\t\t\t\t<div class="checkbox">\r\n\t\t\t\t\t\t\t\t<label>\r\n\t\t\t\t\t\t\t\t\t<input ng-model="settings.showAvg5" ng-change="saveSettings()" type="checkbox" id="inputFuelCalcAvg5">\r\n\t\t\t\t\t\t\t\t\tShow simple average fuel usage and calculations over the last 5 laps\r\n\t\t\t\t\t\t\t\t</label>\r\n\t\t\t\t\t\t\t</div>\r\n\t\t\t\t\t\t</div>\r\n\t\t\t\t\t</div>\r\n\t\t\t\t\t<!-- target laps -->',
+    'fuel-calc/settings.html avg5 toggle'
+  );
+  return src;
 }
 
 function patchRacingOverlayFuelCalcSettingsHtml(src) {
-  return mustReplace(
+  src = mustReplace(
     src,
     '\t\t<!-- custom -->\r\n\t\t<div class="form-group">\r\n\t\t\t<label for="inputFuelCalcCustom" class="col-sm-3 control-label">Custom</label>',
     '\t\t<!-- target laps -->\r\n\t\t<div class="form-group">\r\n\t\t\t<label for="inputFuelCalcTargetLaps" class="col-sm-3 control-label">Target Laps</label>\r\n\t\t\t<div class="col-sm-9">\r\n\t\t\t\t<div class="checkbox">\r\n\t\t\t\t\t<label>\r\n\t\t\t\t\t\t<input ng-model="settings.showTargetLaps" ng-change="saveSettings()" type="checkbox" id="inputFuelCalcTargetLaps">\r\n\t\t\t\t\t\tShow fuel-per-lap targets for laps around your current average pace\r\n\t\t\t\t\t</label>\r\n\t\t\t\t</div>\r\n\t\t\t</div>\r\n\t\t</div>\r\n\t\t<!-- custom -->\r\n\t\t<div class="form-group">\r\n\t\t\t<label for="inputFuelCalcCustom" class="col-sm-3 control-label">Custom</label>',
     'racing-overlay/settings/fuel-calc.html target-laps toggle'
   );
+  src = mustReplace(
+    src,
+    '\t\t\t\t\t\t<input ng-model="settings.showLast" ng-change="saveSettings()" type="checkbox" id="inputFuelCalcLast">\r\n\t\t\t\t\t\tShow last lap fuel usage and calculations\r\n\t\t\t\t\t</label>\r\n\t\t\t\t</div>\r\n\t\t\t</div>\r\n\t\t</div>\r\n\t\t<!-- target laps -->',
+    '\t\t\t\t\t\t<input ng-model="settings.showLast" ng-change="saveSettings()" type="checkbox" id="inputFuelCalcLast">\r\n\t\t\t\t\t\tShow last lap fuel usage and calculations\r\n\t\t\t\t\t</label>\r\n\t\t\t\t</div>\r\n\t\t\t</div>\r\n\t\t</div>\r\n\t\t<!-- avg 5 -->\r\n\t\t<div class="form-group">\r\n\t\t\t<label for="inputFuelCalcAvg5" class="col-sm-3 control-label">Avg 5</label>\r\n\t\t\t<div class="col-sm-9">\r\n\t\t\t\t<div class="checkbox">\r\n\t\t\t\t\t<label>\r\n\t\t\t\t\t\t<input ng-model="settings.showAvg5" ng-change="saveSettings()" type="checkbox" id="inputFuelCalcAvg5">\r\n\t\t\t\t\t\tShow simple average fuel usage and calculations over the last 5 laps\r\n\t\t\t\t\t</label>\r\n\t\t\t\t</div>\r\n\t\t\t</div>\r\n\t\t</div>\r\n\t\t<!-- target laps -->',
+    'racing-overlay/settings/fuel-calc.html avg5 toggle'
+  );
+  return src;
+}
+
+function patchAvg5SharedSettings(src, label) {
+  // Must run AFTER patchTargetLapsSharedSettings — inserts showAvg5 between showLast and
+  // showTargetLaps, so it needs the post-target-laps-patch anchor text.
+  const A_from = 'showQualy:!0,showLast:!1,showTargetLaps:!1,showCustom:!1,showClock:!1,clockStyle:"24",hideClockWhenInMulticlass:!0';
+  const A_to = 'showQualy:!0,showLast:!1,showAvg5:!1,showTargetLaps:!1,showCustom:!1,showClock:!1,clockStyle:"24",hideClockWhenInMulticlass:!0';
+  const B_from = '"showQualy","showLast","showTargetLaps","showCustom","showClock","clockStyle","hideClockWhenInMulticlass"';
+  const B_to = '"showQualy","showLast","showAvg5","showTargetLaps","showCustom","showClock","clockStyle","hideClockWhenInMulticlass"';
+
+  const countA = src.split(A_from).length - 1;
+  if (countA < 1) throw new Error(`Expected at least 1 occurrence of the ${label} fuelCalc defaultSettings anchor (avg5), found 0. This Kapps version's code doesn't match what this patch expects — aborting without changing anything.`);
+  src = src.split(A_from).join(A_to);
+
+  const countB = src.split(B_from).length - 1;
+  if (countB < 1) throw new Error(`Expected at least 1 occurrence of the ${label} fuelCalc urlKeys anchor (avg5), found 0. This Kapps version's code doesn't match what this patch expects — aborting without changing anything.`);
+  src = src.split(B_from).join(B_to);
+
+  return src;
 }
 
 // index.js is Kapps' actual Electron main process (window creation, opening layers) — a
@@ -669,15 +796,21 @@ function main() {
   // chained into either) — a pre-existing gap independent of today's Fastest Lap/target-laps
   // work, fixed here alongside it.
   files[paths.worker] = Buffer.from(
-    patchTargetLapsSharedSettings(
-      patchRelativesSharedSettings(patchWorkerFastestLap(patchWorker(files[paths.worker].toString('utf8'))), 'worker.js'),
+    patchAvg5SharedSettings(
+      patchTargetLapsSharedSettings(
+        patchRelativesSharedSettings(patchWorkerFastestLap(patchWorker(files[paths.worker].toString('utf8'))), 'worker.js'),
+        'worker.js'
+      ),
       'worker.js'
     ),
     'utf8'
   );
   files[paths.standingsJs] = Buffer.from(
-    patchTargetLapsSharedSettings(
-      patchRelativesSharedSettings(patchStandingsJsFastestLap(patchStandingsJs(files[paths.standingsJs].toString('utf8'))), 'standings.js'),
+    patchAvg5SharedSettings(
+      patchTargetLapsSharedSettings(
+        patchRelativesSharedSettings(patchStandingsJsFastestLap(patchStandingsJs(files[paths.standingsJs].toString('utf8'))), 'standings.js'),
+        'standings.js'
+      ),
       'standings.js'
     ),
     'utf8'
@@ -688,31 +821,51 @@ function main() {
   // driver.columns/showCountryFlag for anything itself, but the webpack bundle embeds a copy
   // regardless) — was never getting patchDefaultColumns/patchRelativesSharedSettings either.
   files[paths.settingsJs] = Buffer.from(
-    patchTargetLapsSharedSettings(
-      patchRelativesSharedSettings(patchDefaultColumns(patchSettingsJsFastestLap(patchSettingsJs(files[paths.settingsJs].toString('utf8'))), 'settings.js'), 'settings.js'),
+    patchAvg5SharedSettings(
+      patchTargetLapsSharedSettings(
+        patchRelativesSharedSettings(patchDefaultColumns(patchSettingsJsFastestLap(patchSettingsJs(files[paths.settingsJs].toString('utf8'))), 'settings.js'), 'settings.js'),
+        'settings.js'
+      ),
       'settings.js'
     ),
     'utf8'
   );
   files[paths.settingsCss] = Buffer.from(patchSettingsCssFastestLap(patchSettingsCss(files[paths.settingsCss].toString('utf8'))), 'utf8');
   files[paths.racingOverlay] = Buffer.from(
-    patchTargetLapsSharedSettings(patchDefaultColumns(patchRelativesSharedSettings(files[paths.racingOverlay].toString('utf8'), 'racing-overlay.js'), 'racing-overlay.js'), 'racing-overlay.js'),
+    patchAvg5SharedSettings(
+      patchTargetLapsSharedSettings(patchDefaultColumns(patchRelativesSharedSettings(files[paths.racingOverlay].toString('utf8'), 'racing-overlay.js'), 'racing-overlay.js'), 'racing-overlay.js'),
+      'racing-overlay.js'
+    ),
     'utf8'
   );
   files[paths.mainProcess] = Buffer.from(
-    patchTargetLapsSharedSettings(patchRelativesSharedSettings(patchMainProcessJs(files[paths.mainProcess].toString('utf8')), 'index.js'), 'index.js'),
+    patchAvg5SharedSettings(
+      patchTargetLapsSharedSettings(patchRelativesSharedSettings(patchMainProcessJs(files[paths.mainProcess].toString('utf8')), 'index.js'), 'index.js'),
+      'index.js'
+    ),
     'utf8'
   );
   files[paths.appJs] = Buffer.from(
-    patchTargetLapsSharedSettings(patchRelativesSharedSettings(files[paths.appJs].toString('utf8'), 'app.js'), 'app.js'),
+    patchAvg5SharedSettings(
+      patchTargetLapsSharedSettings(patchRelativesSharedSettings(files[paths.appJs].toString('utf8'), 'app.js'), 'app.js'),
+      'app.js'
+    ),
     'utf8'
   );
   files[paths.fuelCalcJs] = Buffer.from(
-    patchFuelCalcJs(patchTargetLapsSharedSettings(patchRelativesSharedSettings(files[paths.fuelCalcJs].toString('utf8'), 'fuel-calc.js'), 'fuel-calc.js')),
+    patchFuelCalcJs(
+      patchAvg5SharedSettings(
+        patchTargetLapsSharedSettings(patchRelativesSharedSettings(files[paths.fuelCalcJs].toString('utf8'), 'fuel-calc.js'), 'fuel-calc.js'),
+        'fuel-calc.js'
+      )
+    ),
     'utf8'
   );
   files[paths.relativesJs] = Buffer.from(
-    patchTargetLapsSharedSettings(patchRelativesJs(files[paths.relativesJs].toString('utf8')), 'relatives.js'),
+    patchAvg5SharedSettings(
+      patchTargetLapsSharedSettings(patchRelativesJs(files[paths.relativesJs].toString('utf8')), 'relatives.js'),
+      'relatives.js'
+    ),
     'utf8'
   );
   files[paths.relativesIndexHtml] = Buffer.from(patchRelativesIndexHtml(files[paths.relativesIndexHtml].toString('utf8')), 'utf8');
@@ -731,6 +884,7 @@ function main() {
     content = patchDefaultColumns(content, p);
     content = patchRelativesSharedSettings(content, p);
     content = patchTargetLapsSharedSettings(content, p);
+    content = patchAvg5SharedSettings(content, p);
     files[p] = Buffer.from(content, 'utf8');
   }
 
