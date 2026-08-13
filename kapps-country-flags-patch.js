@@ -14,7 +14,18 @@ function findAsar() {
   if (!fs.existsSync(base)) throw new Error(`Could not find ${base}. Pass the app.asar path as an argument.`);
   const versionDirs = fs.readdirSync(base).filter((n) => /^app-\d/.test(n));
   if (!versionDirs.length) throw new Error(`No app-* folder found under ${base}.`);
-  versionDirs.sort(); // lexicographic is fine for these version strings
+  // Compare version numbers component-by-component as integers. A plain lexicographic sort
+  // gets this wrong (it ranks 1.24.9 above 1.24.38, and 1.9.0 above 1.24.38) — which used to
+  // be harmless because only one app-* folder ever existed, but Squirrel leaves the previous
+  // version's folder in place after an update, so picking the right one now actually matters.
+  const versionOf = (n) => n.slice(4).split('.').map((x) => parseInt(x, 10) || 0);
+  versionDirs.sort((a, b) => {
+    const [va, vb] = [versionOf(a), versionOf(b)];
+    for (let i = 0; i < Math.max(va.length, vb.length); i++) {
+      if ((va[i] || 0) !== (vb[i] || 0)) return (va[i] || 0) - (vb[i] || 0);
+    }
+    return 0;
+  });
   const latest = versionDirs[versionDirs.length - 1];
   return path.join(base, latest, 'resources', 'app.asar');
 }

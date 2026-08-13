@@ -1,6 +1,6 @@
 # Kapps Country Flags
 
-A community patch for [Kapps](https://kapps.kutu.ru), the iRacing overlay app whose development has been suspended. It adds a few features Kapps itself never shipped:
+A community patch for [Kapps](https://kapps.kutu.ru), the iRacing overlay app whose active development has wound down (it still gets the occasional update). It adds a few features Kapps itself never shipped:
 
 - **Country flags** next to each driver in **Standings** and **Relatives**
 - A **Fastest Lap column** in **Standings**, highlighting whoever holds the fastest lap within their own class
@@ -96,7 +96,13 @@ Before making any change, the script copies your current `app.asar` to `app.asar
 4. Copy `app.asar.original-backup` and rename the copy to `app.asar`.
 5. Relaunch Kapps — you're back to a completely stock install.
 
+## If Kapps updates itself
+
+A Kapps update installs into a brand-new `app-<version>` folder with a stock `app.asar`, so **the patch is gone and you just re-run it** — the script always targets the highest installed version. Your previous version's folder is left behind untouched, backup and all.
+
+Verified against Kapps **1.24.36** and **1.24.38**. Because every replacement is guarded (see below), a future Kapps update that rewrites the code this patch depends on will make the script stop with an error naming the piece that no longer matches, rather than half-applying.
+
 ## Requirements
 
-- Kapps installed locally (any recent version — development is suspended, so most users are on the same final build).
+- Kapps installed locally.
 - Windows. The script and `.bat` launcher were built and tested on Windows; no other platform has been tried.
