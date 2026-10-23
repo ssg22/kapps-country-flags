@@ -4,8 +4,12 @@ A community patch for [Kapps](https://kapps.kutu.ru), the iRacing overlay app wh
 
 - **Country flags** next to each driver in **Standings** and **Relatives**
 - A **Fastest Lap column** in **Standings**, highlighting whoever holds the fastest lap within their own class
+- Optional **column titles** in **Standings**, at the top of each class
 - A **Target Laps** row in the **Fuel Calculator**, showing the fuel-per-lap needed for a couple of laps around your current pace
 - An **Avg 5** row in the **Fuel Calculator**, showing a simple average of your fuel usage over the last 5 laps
+- A **modern look for the Kapps window**, with a **dark theme toggle** and **tabs for the Racing Overlay widgets** instead of one long list
+- Five **new Racing Overlay widgets**: **Weather** (pick and order the conditions you want to see), **Pit Brake**, **Rejoin Helper**, **Delta Bar** and **Flags** (pit timer, limiter, low fuel, start lights, flags and traffic, each badge optional)
+- A **banner when a new version of this patch is released**, with a setting to turn it off
 
 ## Country flags
 
@@ -42,6 +46,12 @@ Since a fastest lap in Practice or Qualify is often not that meaningful, the col
 
 ![Standings settings popup with the Hide in P&Q checkbox](images/settings-editor-hide-fastest-lap.png)
 
+## Column titles (Standings)
+
+Standings doesn't label its columns. Tick **Column Titles** in Standings' settings window (General tab, under "Show Headers") to add a row naming the columns (P, +/-, #, Driver, Rating, Gap, Int, Lap, and so on) at the top of each class, just under the class header. The titles follow whichever columns you've chosen and line up with them.
+
+![Standings with a row of column titles at the top of each class](images/standings-column-titles.png)
+
 ## Target Laps and Avg 5 (Fuel Calculator)
 
 Two new rows in the Fuel Calculator overlay:
@@ -53,9 +63,112 @@ Two new rows in the Fuel Calculator overlay:
 
 ![Fuel Calculator settings showing the Avg 5 and Target Laps checkboxes](images/fuel-settings.png)
 
+## Modern UI and dark theme
+
+The main Kapps window gets a cleaner, more modern look: rounded cards, softer borders, and tidier inputs, buttons and menus. All the existing sections and pages stay where they were.
+
+- **Dark theme:** the sun/moon button next to minimise switches between light and dark. Until you click it, Kapps follows your Windows light/dark setting. After that it remembers your choice.
+- **Game tabs:** the "Apps" tab in the left rail now carries the iRacing logo and is labelled iRacing. Below it is a new **Le Mans Ultimate** tab with the LMU logo. LMU isn't supported yet (Kapps' overlays read iRacing telemetry only); the tab is its placeholder home for now.
+- **Racing Overlay widget tabs:** instead of scrolling through every widget's settings in one long list, pick a widget from the row of tabs at the top and only its settings are shown. A green dot marks the widgets that are switched on. Custom Overlays and System have tabs too.
+
+![Kapps in the dark theme, Racing Overlay with widget tabs](images/modern-ui-dark.png)
+
+![Kapps in the light theme](images/modern-ui-light.png)
+
+This applies to the main Kapps window. The overlays themselves, and the separate settings windows some widgets open (such as Standings' column editor), are unchanged.
+
+## New widgets: Weather, Pit Brake, Rejoin Helper, Delta Bar and Flags
+
+Five widgets are added to the Racing Overlay, each with its own tab. Kapps' own widgets are all still there. Switch them on from their tab, like any other widget. They can be moved and resized in the overlay's layout editor, or opened as their own layer window.
+
+### Weather
+
+A vertical card of weather information. You choose which rows it shows, and in what order. In the Weather tab's **Information** list, use **Add information** to add a row, the arrows to reorder, and ✕ to remove one. Only weather information can be added:
+
+| Row | Shows |
+|---|---|
+| Track Temp / Air Temp | Temperatures |
+| Wind | Speed, the direction it's coming from, and an arrow showing which way it blows relative to your car |
+| Humidity | Relative humidity |
+| Sky | Clear, partly cloudy, mostly cloudy or overcast |
+| Rain | Precipitation |
+| Track Wetness | iRacing's dry → extremely wet scale, with a bar |
+| Declared Wet | Whether race control has declared the track wet |
+| Fog | Fog level |
+
+Units can follow iRacing's setting or be fixed to metric or imperial. Background opacity is adjustable, and the card scales with its window.
+
+![Weather widget](images/weather-widget.png)
+
+![Weather settings: the Information list with Add information](images/weather-settings.png)
+
+### Pit Brake
+
+Helps you stop on your pit box. On the pit lane it shows **WAIT** and the distance to your braking point. Then it shows **BRAKE** with the distance to the box. Once you're stopped it shows **HOLD** with the services being done (tyres, fuel, fast repair). The braking point uses your speed and a braking strength you can adjust in its tab, so it can be tuned per car if BRAKE comes too early or too late.
+
+![Pit Brake widget](images/pit-brake.png)
+
+### Rejoin Helper
+
+Appears while you're off track, and optionally when you're stopped or spun on track. It shows how many seconds the nearest car behind is from your spot:
+- green **CLEAR**: at or above the "clear" threshold;
+- amber **CAUTION**: in between;
+- red **DANGER**: at or below the "danger" threshold.
+
+Both thresholds are adjustable. The gap is timed the same way Kapps' own Relatives widget times it.
+
+![Rejoin Helper widget](images/rejoin-helper.png)
+
+### Delta Bar
+
+How far ahead or behind a reference lap you are as you drive it. The number shows the delta (green when you're ahead, red when you're behind), and the bar fills from the centre line: right in green when you're ahead, left in red when you're behind. In its tab you can choose:
+- what to compare against: your best lap, the session's best lap, your optimal lap, or the session's optimal lap (Le Mans Ultimate only shares your best lap);
+- the delta that fills half the bar;
+- the number of decimals;
+- how long a finished lap's delta stays up after you cross the line;
+- whether to show the bar at all.
+
+![Delta Bar widget](images/delta-bar.png)
+
+### Flags
+
+A row of badges, each shown only while it applies. In the Flags tab's **Badges** list, use **Add badge** to add one, the arrows to reorder, and ✕ to remove one. They can sit side by side or be stacked.
+
+| Badge | Shows |
+|---|---|
+| Pit lane timer | Time spent on the pit lane (it stays up for 10 s after you leave), or **PIT CLOSED** |
+| Speed limiter | **LIMIT** and your speed while the pit limiter is on |
+| Low fuel / energy | Laps of fuel left (or of virtual energy, in Le Mans Ultimate) when fewer than you set |
+| Start lights | **READY** before the start, then **GREEN** |
+| Yellow flag / caution | **YELLOW** for a local yellow, **CAUTION** for a full-course caution |
+| Blue flag | **BLUE** and how long it has been shown |
+| Traffic | A faster class closing in behind, with its class and gap in seconds. While you rejoin from the pits, or after being slow or off track, any car closing in counts |
+| White / checkered flag | **LAST LAP**, then **FINISH** |
+| Black flag / DSQ | **BLACK FLAG**, **REPAIR** (meatball) or **DSQ** |
+
+The low-fuel threshold (laps) and traffic gap (seconds) are adjustable.
+
+![Flags widget](images/flags.png)
+
+The Weather, Pit Brake and Rejoin Helper ideas come from [KAPPS-UPDATE](https://github.com/Canedaaa/KAPPS-UPDATE) by Lucas Caneda, and the Delta Bar and Flags ideas from [TinyPedal](https://github.com/TinyPedal/TinyPedal). These versions were written separately for this patch.
+
+## New release notifications
+
+When a new version of this patch is published on GitHub, Kapps shows a banner across the top of its window with a link to the release page. The ✕ dismisses it for that release; the next release brings it back.
+
+Kapps checks GitHub's [releases page](https://github.com/ssg22/kapps-country-flags/releases) each time it starts. You can turn the check off in **Kapps → Settings → Patch Updates**, which also shows the version you have installed.
+
+![Release banner](images/release-banner.png)
+
+![Patch Updates setting](images/patch-updates-setting.png)
+
+The patch can't update itself: download the new release and run it as described below.
+
 ## How it works
 
 Kapps ships as a compiled Electron app — there's no source code or build process to hook into. This patch works by directly editing the minified JavaScript/HTML/CSS bundled inside Kapps' `app.asar` archive (unpack → text-patch → repack), the same file format Electron apps use to package their code. `kapps-country-flags-patch.js` does this programmatically against your own local install, using Kapps' own bundled Node.js runtime (via `ELECTRON_RUN_AS_NODE`) — no separate Node.js install required.
+
+Working on the patch itself? [`tools/`](tools/README.md) has scripts that decompile your local Kapps install into readable code (kept out of git) and run Kapps from it with debuggers attached.
 
 Every string replacement the script makes is guarded: it checks the exact original text exists exactly once before changing anything, and aborts without touching the file if it doesn't. This means if a future Kapps update changes the underlying code, the patch fails loudly instead of silently corrupting your install.
 
@@ -100,7 +213,7 @@ Before making any change, the script copies your current `app.asar` to `app.asar
 
 A Kapps update installs into a brand-new `app-<version>` folder with a stock `app.asar`, so **the patch is gone and you just re-run it** — the script always targets the highest installed version. Your previous version's folder is left behind untouched, backup and all.
 
-Verified against Kapps **1.24.36** and **1.24.38**. Because every replacement is guarded (see below), a future Kapps update that rewrites the code this patch depends on will make the script stop with an error naming the piece that no longer matches, rather than half-applying.
+Verified against Kapps **1.24.36**, **1.24.38** and **1.24.40**. Because every replacement is guarded (see below), a future Kapps update that rewrites the code this patch depends on will make the script stop with an error naming the piece that no longer matches, rather than half-applying.
 
 ## Requirements
 
