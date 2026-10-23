@@ -5,6 +5,10 @@ CLAUDE.md
 *.asar.original-backup
 *.asar.patched
 
+# Decompiled Kapps code (regenerate with tools/decompile.mjs) and local tooling deps
+decompiled/
+node_modules/
+
 # OS junk
 .DS_Store
 Thumbs.db

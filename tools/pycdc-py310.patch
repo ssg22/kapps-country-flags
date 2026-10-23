@@ -1,0 +1,207 @@
+diff --git a/ASTree.cpp b/ASTree.cpp
+index f837152..b3ce9fd 100644
+--- a/ASTree.cpp
++++ b/ASTree.cpp
+@@ -25,6 +25,14 @@ static bool cleanBuild;
+ /* Use this to prevent printing return keywords and newlines in lambdas. */
+ static bool inLambda = false;
+ 
++/* Map key marking a "**x" entry produced by DICT_MERGE (3.9+) */
++static PycRef<ASTNode> starstar_name()
++{
++    PycRef<PycString> s = new PycString();
++    s->setValue("**");
++    return new ASTName(s);
++}
++
+ /* Use this to keep track of whether we need to print out any docstring and
+  * the list of global variables that we are using (such as inside a function). */
+ static bool printDocstringAndGlobals = false;
+@@ -608,6 +616,73 @@ PycRef<ASTNode> BuildFromCode(PycRef<PycCode> code, PycModule* mod)
+                 stack.push(new ASTCall(func, pparamList, kwparamList));
+             }
+             break;
++        case Pyc::DICT_MERGE_A:
++        case Pyc::DICT_UPDATE_A:
++            {
++                /* 3.9+: merge TOS into the map below it ("**x" in a call or dict display).
++                   Only the common operand==1 shape is handled; "**" entries are unpacked by CALL_FUNCTION_EX. */
++                PycRef<ASTNode> value = stack.top();
++                stack.pop();
++                PycRef<ASTNode> target = stack.top();
++                if (target.type() == ASTNode::NODE_MAP && target.cast<ASTMap>()->values().empty()) {
++                    stack.pop();
++                    stack.push(value);
++                } else if (target.type() == ASTNode::NODE_MAP) {
++                    target.cast<ASTMap>()->add(starstar_name(), value);
++                } else {
++                    /* Already-merged expression: rebuild as a map holding both */
++                    stack.pop();
++                    auto map = new ASTMap;
++                    map->add(starstar_name(), target);
++                    map->add(starstar_name(), value);
++                    stack.push(map);
++                }
++            }
++            break;
++        case Pyc::CALL_FUNCTION_EX_A:
++            {
++                /* 3.6+: f(*args, **kwargs). TOS is the kwargs mapping (if operand & 1), then the args tuple. */
++                ASTCall::kwparam_t kwparamList;
++                ASTCall::pparam_t pparamList;
++                PycRef<ASTNode> kw, var;
++                if (operand & 1) {
++                    PycRef<ASTNode> kwargs = stack.top();
++                    stack.pop();
++                    if (kwargs.type() == ASTNode::NODE_MAP) {
++                        for (const auto& kv : kwargs.cast<ASTMap>()->values()) {
++                            if (kv.first.type() == ASTNode::NODE_NAME
++                                    && strcmp(kv.first.cast<ASTName>()->name()->value(), "**") == 0)
++                                kw = kv.second;
++                            else
++                                kwparamList.push_back(kv);
++                        }
++                    } else {
++                        kw = kwargs;
++                    }
++                }
++                PycRef<ASTNode> args = stack.top();
++                stack.pop();
++                if (args.type() == ASTNode::NODE_TUPLE) {
++                    for (const auto& v : args.cast<ASTTuple>()->values())
++                        pparamList.push_back(v);
++                } else if (args.type() == ASTNode::NODE_OBJECT
++                        && (args.cast<ASTObject>()->object().type() == PycObject::TYPE_TUPLE
++                            || args.cast<ASTObject>()->object().type() == PycObject::TYPE_SMALL_TUPLE)) {
++                    for (const auto& v : args.cast<ASTObject>()->object().cast<PycTuple>()->values())
++                        pparamList.push_back(new ASTObject(v));
++                } else {
++                    var = args;
++                }
++                PycRef<ASTNode> func = stack.top();
++                stack.pop();
++                PycRef<ASTCall> call = new ASTCall(func, pparamList, kwparamList);
++                if (var != nullptr)
++                    call->setVar(var);
++                if (kw != nullptr)
++                    call->setKW(kw);
++                stack.push(call.cast<ASTNode>());
++            }
++            break;
+         case Pyc::CALL_FUNCTION_VAR_A:
+             {
+                 PycRef<ASTNode> var = stack.top();
+@@ -639,10 +714,27 @@ PycRef<ASTNode> BuildFromCode(PycRef<PycCode> code, PycModule* mod)
+             {
+                 PycRef<ASTNode> kw = stack.top();
+                 stack.pop();
+-                int kwparams = (operand & 0xFF00) >> 8;
+-                int pparams = (operand & 0xFF);
+                 ASTCall::kwparam_t kwparamList;
+                 ASTCall::pparam_t pparamList;
++                if (mod->verCompare(3, 6) >= 0 && kw.type() == ASTNode::NODE_OBJECT) {
++                    /* 3.6+: TOS is a tuple of keyword names for the last len(names) of `operand` args */
++                    PycRef<PycTuple> names = kw.cast<ASTObject>()->object().cast<PycTuple>();
++                    int nkw = names->size();
++                    for (int i = nkw - 1; i >= 0; i--) {
++                        kwparamList.push_front(std::make_pair(new ASTObject(names->get(i)), stack.top()));
++                        stack.pop();
++                    }
++                    for (int i = 0; i < operand - nkw; i++) {
++                        pparamList.push_front(stack.top());
++                        stack.pop();
++                    }
++                    PycRef<ASTNode> func = stack.top();
++                    stack.pop();
++                    stack.push(new ASTCall(func, pparamList, kwparamList));
++                    break;
++                }
++                int kwparams = (operand & 0xFF00) >> 8;
++                int pparams = (operand & 0xFF);
+                 for (int i=0; i<kwparams; i++) {
+                     PycRef<ASTNode> val = stack.top();
+                     stack.pop();
+@@ -1120,6 +1212,17 @@ PycRef<ASTNode> BuildFromCode(PycRef<PycCode> code, PycModule* mod)
+                 stack.push(new ASTCompare(left, right, operand ? ASTCompare::CMP_IS_NOT : ASTCompare::CMP_IS));
+             }
+             break;
++        case Pyc::JUMP_IF_NOT_EXC_MATCH_A:
++            {
++                /* 3.9/3.10: fused "COMPARE_OP exception-match; POP_JUMP_IF_FALSE" */
++                PycRef<ASTNode> right = stack.top();
++                stack.pop();
++                PycRef<ASTNode> left = stack.top();
++                stack.pop();
++                stack.push(new ASTCompare(left, right, ASTCompare::CMP_EXCEPTION));
++                opcode = Pyc::POP_JUMP_IF_FALSE_A;
++            }
++            /* Fall through */
+         case Pyc::JUMP_IF_FALSE_A:
+         case Pyc::JUMP_IF_TRUE_A:
+         case Pyc::JUMP_IF_FALSE_OR_POP_A:
+@@ -1585,7 +1688,9 @@ PycRef<ASTNode> BuildFromCode(PycRef<PycCode> code, PycModule* mod)
+             stack.push(new ASTLoadBuildClass(new PycObject()));
+             break;
+         case Pyc::LOAD_CLOSURE_A:
+-            /* Ignore this */
++            /* 3.6+ MAKE_FUNCTION pops the closure tuple built from these, so they must be on the stack */
++            if (mod->verCompare(3, 6) >= 0)
++                stack.push(new ASTName(code->getCellVar(mod, operand)));
+             break;
+         case Pyc::LOAD_CONST_A:
+             {
+@@ -1662,6 +1767,43 @@ PycRef<ASTNode> BuildFromCode(PycRef<PycCode> code, PycModule* mod)
+                 }
+ 
+                 ASTFunction::defarg_t defArgs, kwDefArgs;
++                if (mod->verCompare(3, 6) >= 0) {
++                    /* 3.6+: operand is a flag mask. Stack (bottom->top): defaults tuple (0x01),
++                       kwdefaults dict (0x02), annotations (0x04), closure tuple (0x08) */
++                    if (operand & 0x08)
++                        stack.pop();
++                    if (operand & 0x04)
++                        stack.pop();
++                    if (operand & 0x02) {
++                        PycRef<ASTNode> kw = stack.top();
++                        stack.pop();
++                        if (kw.type() == ASTNode::NODE_CONST_MAP) {
++                            for (const auto& v : kw.cast<ASTConstMap>()->values())
++                                kwDefArgs.push_back(v);
++                        } else if (kw.type() == ASTNode::NODE_MAP) {
++                            for (const auto& kv : kw.cast<ASTMap>()->values())
++                                kwDefArgs.push_back(kv.second);
++                        }
++                    }
++                    if (operand & 0x01) {
++                        PycRef<ASTNode> defs = stack.top();
++                        stack.pop();
++                        if (defs.type() == ASTNode::NODE_TUPLE) {
++                            for (const auto& v : defs.cast<ASTTuple>()->values())
++                                defArgs.push_back(v);
++                        } else if (defs.type() == ASTNode::NODE_OBJECT) {
++                            PycRef<PycObject> obj = defs.cast<ASTObject>()->object();
++                            if (obj.type() == PycObject::TYPE_TUPLE || obj.type() == PycObject::TYPE_SMALL_TUPLE) {
++                                for (const auto& v : obj.cast<PycTuple>()->values())
++                                    defArgs.push_back(new ASTObject(v));
++                            } else {
++                                defArgs.push_back(defs);
++                            }
++                        }
++                    }
++                    stack.push(new ASTFunction(fun_code, defArgs, kwDefArgs));
++                    break;
++                }
+                 const int defCount = operand & 0xFF;
+                 const int kwDefCount = (operand >> 8) & 0xFF;
+                 for (int i = 0; i < defCount; ++i) {
+@@ -1954,7 +2096,9 @@ PycRef<ASTNode> BuildFromCode(PycRef<PycCode> code, PycModule* mod)
+                     curblock = blocks.top();
+                     curblock->append(prev.cast<ASTNode>());
+ 
+-                    bc_next(source, mod, opcode, operand, pos);
++                    /* A trailing return (e.g. end of a filtered genexpr) has nothing after it */
++                    if (!source.atEof())
++                        bc_next(source, mod, opcode, operand, pos);
+                 }
+             }
+             break;

@@ -1,0 +1,19 @@
+{
+  // Start Kapps first with `node tools/dev.mjs start`, then attach with one of these.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Attach to Kapps main process",
+      "type": "node",
+      "request": "attach",
+      "port": 9229,
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "name": "Attach to Kapps window",
+      "type": "chrome",
+      "request": "attach",
+      "port": 9222
+    }
+  ]
+}
