@@ -79,7 +79,7 @@ Two new rows in the Fuel Calculator overlay:
 The main Kapps window gets a cleaner, more modern look: rounded cards, softer borders, and tidier inputs, buttons and menus. All the existing sections and pages stay where they were.
 
 - **Dark theme:** the sun/moon button next to minimise switches between light and dark. Until you click it, Kapps follows your Windows light/dark setting. After that it remembers your choice.
-- **Game tabs:** the "Apps" tab in the left rail now carries the iRacing logo and is labelled iRacing. Below it is a new **Le Mans Ultimate** tab with the LMU logo. LMU isn't supported yet (Kapps' overlays read iRacing telemetry only); the tab is its placeholder home for now.
+- **Game tabs:** the "Apps" tab in the left rail now carries the iRacing logo and is labelled iRacing. Below it is a new **Le Mans Ultimate** tab with the LMU logo (see [Le Mans Ultimate](#le-mans-ultimate)).
 - **Racing Overlay widget tabs:** instead of scrolling through every widget's settings in one long list, pick a widget from the row of tabs at the top and only its settings are shown. A green dot marks the widgets that are switched on. Custom Overlays and System have tabs too.
 
 ![Kapps in the dark theme, Racing Overlay with widget tabs](images/modern-ui-dark.png)
@@ -162,6 +162,33 @@ The low-fuel threshold (laps) and traffic gap (seconds) are adjustable.
 ![Flags widget](images/flags.png)
 
 The Weather, Pit Brake and Rejoin Helper ideas come from [KAPPS-UPDATE](https://github.com/Canedaaa/KAPPS-UPDATE) by Lucas Caneda, and the Delta Bar and Flags ideas from [TinyPedal](https://github.com/TinyPedal/TinyPedal). These versions were written separately for this patch.
+
+## Le Mans Ultimate
+
+The **Le Mans Ultimate** tab has its own Racing Overlay, with the same widgets and settings as iRacing's but separate profiles and layouts. In Le Mans Ultimate, turn on **Settings → Gameplay → Enable Plugins**. That lets the patch's bridge (`lmu.exe`, which Kapps starts and restarts like its other helpers) read the game's telemetry and serve it to the widgets.
+
+What's different from iRacing:
+- Options with nothing behind them in LMU are hidden: SOF, incidents, humidity, rating gain, country flags and joker laps.
+- Standings has LMU-only **DMG** (damage), **FUEL** (virtual energy in blue for cars that use it, fuel otherwise) and **TYRES** columns. TYRES shows each wheel's compound, since LMU allows mixing them.
+- There's no Rating column yet, because LMU's Safety and Driver Ratings aren't available to Kapps. Track Map and Tyres are iRacing-only.
+- LMU shares no start lights, so Flags shows READY for the countdown. The Delta Bar compares against your best lap only.
+
+## Fixes to Kapps itself
+
+The patch also fixes bugs in Kapps' own widgets:
+- **Fuel Calculator and Relatives, multiclass timed races:** slower classes were told they'd run their own pace's laps, not the overall leader's. That could fuel them a lap short.
+- **Fuel Calculator average:** it sorted fuel use as text (10.1 before 9.8), so the wrong laps were dropped from its trimmed average.
+- **Standings:**
+  - one error froze the widget for good;
+  - Gap/Int were wrong on a multiclass grid before the first lap;
+  - Live Standings broke in races without qualifying results;
+  - LMU classes the bridge doesn't know merged into another class.
+- **Car Left Right:** cars in the pit lane and the pace car were taken for the car alongside you.
+- **MGU:** it only appeared for a fixed list of hybrid cars. It now appears for any car reporting a battery charge, LMU's hybrids included.
+- **Smaller fixes:**
+  - Pit Helper and the overlay page kept work running in the background.
+  - Twitch Counters froze its viewer count when the stream ended.
+  - Relatives' reference laps were checked against the wrong class.
 
 ## New release notifications
 

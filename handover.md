@@ -83,6 +83,13 @@ These were built to match TinyPedal and the shared memory docs, but only tested 
 - [ ] Rejoin Helper and Weather work as before. Both were reworked to share code with the new Flags widget.
 - [ ] Your iRacing profiles and layouts are unchanged.
 
+### Bug fixes to Kapps (only a real iRacing session can confirm these)
+- [ ] **Multiclass timed race, in a slower class:** Fuel Calculator's "Laps in Race" should be the laps you'll actually run, usually one more than your own pace alone gives. Compare it with Standings' header estimate.
+- [ ] **Multiclass race start:** Standings shows sensible Gap/Int per class on the grid and during the pace laps, and doesn't freeze.
+- [ ] **Car Left Right on the pit straight:** with cars in the pit lane, the bar follows the car actually alongside you.
+- [ ] **Newer hybrid cars:** the MGU widget appears.
+- [ ] **League race with no qualifying, Live Standings on:** positions and gaps keep updating.
+
 ## 6. Collect and bring back to Claude
 
 Do these with LMU running. The main menu is enough for the first one; for the second you need to be in a car.

@@ -525,10 +525,12 @@ function patchFuelCalcJs(src) {
   // and worst lap before averaging. Reuses the SAME rolling 5-lap `fuels` array Kapps already
   // maintains for that trimmed mean, so no new state tracking is needed — just a second,
   // simpler reduction over the same data, computed right alongside the existing usageAvg calc.
+  // It also fixes that trimmed mean, which sorted the per-lap fuel use as text (10.1 L before
+  // 9.8 L) and so could drop the wrong laps.
   src = mustReplace(
     src,
     'fuels.length&&((f=fuels.slice()).length>=3&&(f=f.sort().slice(1,-1)),total=f.reduce((function(a,b){return a+b})),scope.usageAvg=total/f.length)',
-    'fuels.length&&(scope.usageAvg5=fuels.reduce((function(a,b){return a+b}),0)/fuels.length,(f=fuels.slice()).length>=3&&(f=f.sort().slice(1,-1)),total=f.reduce((function(a,b){return a+b})),scope.usageAvg=total/f.length)',
+    'fuels.length&&(scope.usageAvg5=fuels.reduce((function(a,b){return a+b}),0)/fuels.length,(f=fuels.slice()).length>=3&&(f=f.sort(function(a,b){return a-b}).slice(1,-1)),total=f.reduce((function(a,b){return a+b})),scope.usageAvg=total/f.length)',
     'fuel-calc.js usageAvg5 computation'
   );
   src = mustReplace(
@@ -1461,17 +1463,14 @@ def stable_id(name, base):
     return base + zlib.crc32(name.encode()) % base
 
 
-# LMU has no class colours. Kapps' Standings tells classes apart by colour from iRacing's fixed palette
-# (yellow, blue, pink, purple, green, orange, white) and orders them by it, so classes take palette
-# colours in speed order, LMP2 blue and LMGT3 green as in the WEC.
+# LMU has no class colours. Kapps' Standings tells classes apart by colour, from iRacing's palette (any other
+# colour, white included, counting as its first) and orders them by it, so classes take palette colours in
+# speed order, LMP2 blue and LMGT3 green as in the WEC.
+PALETTE = (0xFFDA59, 0x33CEFF, 0xFF5888, 0xAE6BFF, 0x53FF77, 0xD35400)
 CLASSES = {
-    'Hyper': ('HYPER', 0xFFDA59), 'Hypercar': ('HYPER', 0xFFDA59), 'LMP2': ('LMP2', 0x33CEFF),
-    'LMP2_ELMS': ('LMP2', 0xFF5888), 'LMP3': ('LMP3', 0xAE6BFF), 'GT3': ('LMGT3', 0x53FF77), 'GTE': ('GTE', 0xD35400),
+    'Hyper': ('HYPER', PALETTE[0]), 'Hypercar': ('HYPER', PALETTE[0]), 'LMP2': ('LMP2', PALETTE[1]),
+    'LMP2_ELMS': ('LMP2', PALETTE[2]), 'LMP3': ('LMP3', PALETTE[3]), 'GT3': ('LMGT3', PALETTE[4]), 'GTE': ('GTE', PALETTE[5]),
 }
-
-
-def class_info(name):
-    return CLASSES.get(name, (name.upper()[:6], 0xFFFFFF))
 
 
 # iRacing's TrackWetness scale (1 dry .. 7 extremely wet) from LMU's 0..1 path wetness.
@@ -1502,6 +1501,8 @@ class Lmu:
         self.tick = 0
         self.session_info = {}          # key -> (version, value)
         self.best_lap = {}              # car mID -> lap its best time was set on
+        self.class_colours = {}         # class -> (short name, colour) this session; see class_info
+        self.class_session = None
         self.ve_cars = set()            # (mID, vehicle) of cars that have reported virtual energy; mIDs are
                                         # reused by other cars in later sessions
 
@@ -1742,9 +1743,11 @@ class Lmu:
             if s.mEstimatedLapTime > 0:
                 klass = s.mVehicleClass
                 est_lap_by_class[klass] = min(est_lap_by_class.get(klass, 1e9), s.mEstimatedLapTime)
+        if self.class_session != (info.mSession, text(info.mTrackName)):
+            self.class_session, self.class_colours = (info.mSession, text(info.mTrackName)), {}
         for s, t in cars:
             klass = text(s.mVehicleClass)
-            short, colour = class_info(klass)
+            short, colour = ('PACE', 0xFFFFFF) if t and t.mVehicleClass == 8 else self.class_info(klass)
             name, model = text(s.mDriverName), text(t.mVehicleModel) if t else ''
             number = re.search(r'#(\d+)', text(s.mVehicleName))
             drivers.append({
@@ -1767,6 +1770,16 @@ class Lmu:
             'DriverCarFuelKgPerLtr': 0.75, 'DriverCarRedLine': tele.mEngineMaxRPM if tele else 0,
             'Drivers': drivers,
         }
+
+    def class_info(self, name):
+        """A class's short name and colour, kept for the session, as Standings regroups a class whose colour
+        changes. A class this doesn't know takes a palette colour no class has had this session, those of the
+        classes least likely to be there first; past six classes, colours (and so Standings' groups) are shared."""
+        if name not in self.class_colours:
+            taken = {colour for _, colour in self.class_colours.values()}
+            spare = [colour for colour in reversed(PALETTE) if colour not in taken]
+            self.class_colours[name] = CLASSES.get(name) or (name.upper()[:6], spare[0] if spare else 0xFFFFFF)
+        return self.class_colours[name]
 
     @staticmethod
     def damage(tele):
@@ -2123,6 +2136,79 @@ function patchColourLogosSettingsHtml(src) {
       '\t\t\t<div class="col-sm-9"><div class="checkbox"><label><input ng-model="settingsMain.colourLogos" ng-change="saveSettings()" type="checkbox" /> Full colour</label></div></div>\r\n\t\t</div>\r\n',
     'settings.html colour logos'
   );
+}
+
+// --- Kapps bug fixes ----------------------------------------------------------------------
+// Bugs in stock Kapps, found by reading its code: file -> [from, to, count (1 if left out)], each with why.
+const KAPPS_FIXES = {
+  'js/common-ir.js': [
+    // A timed race's laps for Fuel Calc and Relatives: a slower class runs as long as the overall leader, who
+    // finishes the lap in progress. The leader was looked for at Position 0, right for qualifying results but
+    // not for a session's results (used when there are none), where Position starts at 1; then every class got
+    // only its own pace's laps, and Fuel Calc could fuel a slower class a lap short. Now: the first result's.
+    ['0===(p=results[l]).Position&&p.FastestTime>0', 'results[0].Position===(p=results[l]).Position&&p.FastestTime>0'],
+    ['avgSessionLaps=0!==p.Position&&', 'avgSessionLaps=results[0].Position!==p.Position&&'],
+  ],
+  'apps/server/racing-overlay/standings2/worker/worker.js': [
+    // Standings: an error in one telemetry watcher left the client mid-update for good, freezing the widget.
+    ['(d=p[i]).cancel||this.applyWatcher(d);', 'try{(d=p[i]).cancel||this.applyWatcher(d)}catch(e){console.error(e)}'],
+    // Standings' gaps on a race's grid (before results): the class (a) was never set, so all classes shared one
+    // leader and car ahead, and those were only kept for cars whose position changed, so a car with an
+    // unchanged position could find none and crash.
+    [
+      '({ppq:H}=l.gapData),H&&H.ClassPosition===B.ClassPosition||(0===B.ClassPosition&&k.set(a,B),P=k.get(a),F=E.get(a),E.set(a,B),v||0!==P.FastestLap?',
+      '({ppq:H}=l.gapData),a=l.driverInfo.CarClassID,0===B.ClassPosition&&k.set(a,B),P=k.get(a),F=E.get(a),E.set(a,B),H&&H.ClassPosition===B.ClassPosition||(P&&(v||0!==P.FastestLap)?',
+    ],
+    // Live Standings with no qualifying results (or a car not in them), or no race results yet, crashed.
+    ['S=v.find(', 'S=v&&v.find('],
+    ['I=L.find(', 'I=L&&L.find('],
+    ['t.gain=S.ClassPosition-g.position', 't.gain=S?S.ClassPosition-g.position:null'],
+  ],
+  'apps/server/fuel-calc/fuel-calc.js': [
+    // Fuel Calc kept asking the main window for its settings every 200 ms after a reconnect (as the overlay page)
+    ['return requestUpdateURLParams(),requestUpdateURLParamsInterval=setInterval(', 'return clearInterval(requestUpdateURLParamsInterval),requestUpdateURLParams(),requestUpdateURLParamsInterval=setInterval('],
+  ],
+  'apps/server/racing-overlay/car-left-right/car-left-right.js': [
+    // Car Left Right placed the car alongside from the nearest car by lap distance, counting cars in the pit
+    // lane and the pace car.
+    ['requestParams=["CarIdxLapDistPct","CarLeftRight","IsOnTrack"]', 'requestParams=["CarIdxLapDistPct","CarLeftRight","IsOnTrack","CarIdxOnPitRoad"]'],
+    ['carIdx!==driverCarIdx&&-1!==dist&&', 'carIdx!==driverCarIdx&&-1!==dist&&!(ir.CarIdxOnPitRoad&&ir.CarIdxOnPitRoad[carIdx])&&!(ir.DriverInfo&&carIdx===ir.DriverInfo.PaceCarIdx)&&'],
+  ],
+  'apps/server/racing-overlay/relatives/relatives.js': [
+    // the same in Relatives' car left/right line (it already gets CarIdxOnPitRoad)
+    ['carIdx!==driverCarIdx&&-1!==dist&&', 'carIdx!==driverCarIdx&&-1!==dist&&!(ir.CarIdxOnPitRoad&&ir.CarIdxOnPitRoad[carIdx])&&!(ir.DriverInfo&&carIdx===ir.DriverInfo.PaceCarIdx)&&'],
+  ],
+  'apps/server/racing-overlay/mgu/mgu.js': [
+    // MGU only showed for a fixed list of hybrid cars; now also for a car once it has reported a battery charge
+    // (newer iRacing hybrids, LMU's hybrids), remembered so it doesn't hide when the battery is empty.
+    ['(71===carId||', '(checkShow.hybrid===carId||ir.EnergyERSBatteryPct>0&&(checkShow.hybrid=carId,!0)||71===carId||'],
+    ['$scope.$watchGroup(["ir.connected","ir.DriverInfo","ir.IsOnTrack"],(function(){return checkShow()}))', '$scope.$watchGroup(["ir.connected","ir.DriverInfo","ir.IsOnTrack","ir.EnergyERSBatteryPct>0"],(function(){return checkShow()}))'],
+  ],
+  'apps/server/racing-overlay/pit-helper/pit-helper.js': [
+    // Pit Helper's bars meant to stop watching outside pit states 1-3, but the test (below 1 and above 3) never held.
+    ['1>(ref=scope.pitState)&&ref>3?', '1>(ref=scope.pitState)||ref>3?', 2],
+  ],
+  'apps/server/racing-overlay/racing-overlay.js': [
+    // The overlay page started new 200 ms profile requests on every reconnect without stopping the old ones.
+    ['return requestProfile(),requestProfileInterval=setInterval(requestProfile,200)', 'return clearInterval(requestProfileInterval),clearInterval(requestHideWhenInInterval),requestProfile(),requestProfileInterval=setInterval(requestProfile,200)'],
+  ],
+  'apps/server/racing-overlay/counters/counters.js': [
+    // Counters' viewer count crashed, and so stayed at its last number, once the stream went offline.
+    ['this.viewersEl.textContent=t.data[0].viewer_count', 'this.viewersEl.textContent=t.data[0]?t.data[0].viewer_count:0'],
+  ],
+  'apps/server/racing-overlay/workers/lap-position-time-records.js': [
+    // Relatives' reference laps: a new lap was checked against the previous car's class record, not its own.
+    ['t=n.get(r),o.sessionNum', 't=n.get(o.driver.CarClassID),o.sessionNum'],
+  ],
+};
+
+function patchKappsFixes(files) {
+  for (const [file, fixes] of Object.entries(KAPPS_FIXES)) {
+    if (!files[file]) throw new Error(`Expected file not found in archive: ${file}`);
+    let src = files[file].toString('utf8');
+    for (const [from, to, count = 1] of fixes) src = mustReplaceAll(src, from, to, count, `${file} fix`);
+    files[file] = Buffer.from(src, 'utf8');
+  }
 }
 
 // --- Patch release notifications ----------------------------------------------------------
@@ -2956,6 +3042,8 @@ function main() {
   files[paths.appJs] = Buffer.from(patchColourLogosAppJs(files[paths.appJs].toString('utf8')), 'utf8');
   files[paths.settingsJs] = Buffer.from(patchColourLogosEditorJs(files[paths.settingsJs].toString('utf8')), 'utf8');
   files[paths.racingOverlaySettingsHtml] = Buffer.from(patchColourLogosSettingsHtml(files[paths.racingOverlaySettingsHtml].toString('utf8')), 'utf8');
+
+  patchKappsFixes(files);
 
   installLmuBridge(asarPath);
   const tmpPath = asarPath + '.new';
