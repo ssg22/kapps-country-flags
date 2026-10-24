@@ -31,7 +31,7 @@ The patch is verified against Kapps 1.24.36, 1.24.38 and 1.24.40. If the sim PC 
 
 - [ ] In LMU, turn on **Settings → Gameplay → Enable Plugins**. This is how Kapps gets LMU's telemetry.
 - [ ] In Kapps, open the **LMU** tab (under the iRacing icon) → **Racing Overlay**. LMU keeps its own profiles, separate from iRacing's.
-- [ ] Start a session in LMU and open some widgets. Every widget except Track Map and Tyres should work.
+- [ ] Start a session in LMU and open some widgets. Every widget except Track Map should work.
 - [ ] If nothing shows, check `%APPDATA%\kapps\iRacingBrowserApps\lmu.log`. It should say `Le Mans Ultimate bridge on port 8187` and then `LMU connected`.
 
 ## 4. LMU: things only the real game can confirm
@@ -63,6 +63,7 @@ These were built to match TinyPedal and the shared memory docs, but only tested 
 - [ ] Fuel Calculator in a car without VE (LMP2): fuel in litres and per-lap usage look right.
 - [ ] Fuel Calculator in a VE car (Hypercar): the first box reads **Energy %** and matches the car's VE. Average usage, laps remaining and refuel make sense in VE %, and the refuel amount matches what LMU's pit menu would add.
 - [ ] Weather: air and track temperature, rain and wetness.
+- [ ] Tyres: the four tyres' tread temperatures (left, middle, right) and pressures look right and match LMU's own tyre screen, including which side is which on the right-hand tyres.
 - [ ] Brake bias reads the same as in the car.
 - [ ] Try both offline with AI and online multiplayer.
 

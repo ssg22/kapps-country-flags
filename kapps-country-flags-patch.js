@@ -966,8 +966,8 @@ const WIDGET_TABS = [
   ['trackMap', 'Track Map'], ['twitchChat', 'Twitch Chat'], ['followers', 'Twitch Followers'],
   ['counters', 'Twitch Counters'],
 ];
-// Widgets with no Le Mans Ultimate equivalent: Track Map is an iRacing web map, Tyres reads iRacing's .ibt files.
-const IRACING_ONLY_WIDGETS = ['trackMap', 'tyres'];
+// Widgets with no Le Mans Ultimate equivalent: Track Map is an iRacing web map.
+const IRACING_ONLY_WIDGETS = ['trackMap'];
 // and the other way round: iRacing shares no damage
 const LMU_ONLY_WIDGETS = ['damage'];
 
@@ -1269,7 +1269,7 @@ const LMU_ABOUT_HTML = `<div class="container-fluid">
 
 \t\t\t- Le Mans Ultimate doesn't share driver nationality, so there are no country flags.
 \t\t\t- There is no wind in Le Mans Ultimate, so Weather's wind row stays empty.
-\t\t\t- Track Map and Tyres are iRacing-only.
+\t\t\t- Track Map is iRacing-only. Tyres shows live tread temperatures and pressures.
 \t\t\t- Standings has no Rating column yet: Le Mans Ultimate's Safety and Driver Ratings aren't available to Kapps.
 \t\t\t- Standings' **Tyres** column shows each wheel's compound, since Le Mans Ultimate allows mixing them, in place of iRacing's Tyre Compound column.
 \t\t\t- Le Mans Ultimate shares no start lights: Flags shows READY for the countdown, then GREEN.
@@ -1679,7 +1679,14 @@ class Lmu:
             'LmuDamage': data['CarIdxLmuDamage'][scor.mID],
             'LmuImpactTime': tele.mLastImpactET,
             'LmuImpactAngle': math.degrees(math.atan2(-tele.mLastImpactPos.x, -tele.mLastImpactPos.z)),
+            # the Tyres widget reads iRacing's .ibt file, which Kapps' server serves as arrays of the samples since
+            # the last update; LMU's are live, so each is the latest sample alone
+            'ibt_LapDistPct': [data['CarIdxLapDistPct'][scor.mID]],
         })
+        for corner, wheel in zip(('LF', 'RF', 'LR', 'RR'), tele.mWheels):
+            # tread surface temperatures left/middle/right in Kelvin, pressure in kPa as iRacing's
+            data.update({f'ibt_{corner}temp{side}': [wheel.mTemperature[i] - 273.15] for i, side in enumerate('LMR')})
+            data[f'ibt_{corner}pressure'] = [wheel.mPressure]
         return data
 
     def class_positions(self, cars):
