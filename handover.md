@@ -54,6 +54,12 @@ These were built to match TinyPedal and the shared memory docs, but only tested 
 - [ ] Pedals and Inputs Graph: throttle, brake and **clutch** move the right way (the clutch was inverted to match iRacing).
 - [ ] Steering turns the right way (left is left).
 - [ ] Car Left/Right (spotter): cars alongside show on the **correct side**.
+- [ ] **Damage** widget (LMU tab only): crash into something and check that:
+  - the hit zone turns amber, then red, on the right side of the car;
+  - the cone points to where the hit came from (front, rear, left, right);
+  - a puncture outlines that wheel in red;
+  - the percentage matches Standings' DMG column.
+  If the cone points the wrong way, say which way it was hit and which way the cone pointed: LMU's impact position might be in world coordinates rather than the car's own.
 - [ ] Fuel Calculator in a car without VE (LMP2): fuel in litres and per-lap usage look right.
 - [ ] Fuel Calculator in a VE car (Hypercar): the first box reads **Energy %** and matches the car's VE. Average usage, laps remaining and refuel make sense in VE %, and the refuel amount matches what LMU's pit menu would add.
 - [ ] Weather: air and track temperature, rain and wetness.

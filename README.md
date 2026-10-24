@@ -173,6 +173,13 @@ What's different from iRacing:
 - For cars that run on virtual energy, the **Fuel Calculator** works in percent of VE, shown as **Energy %**: usage per lap, laps remaining and refuel all count VE, the way LMU's pit menu refills it. Cars without VE (LMP2, for example) stay in litres.
 - There's no Rating column yet, because LMU's Safety and Driver Ratings aren't available to Kapps. Track Map and Tyres are iRacing-only.
 - LMU shares no start lights, so Flags shows READY for the countdown. The Delta Bar compares against your best lap only.
+- An LMU-only **Damage** widget (its tab only appears on the LMU tab) shows your car from above:
+  - its 8 body zones turn amber, then red, as they're damaged, and flash if the rear wing comes off;
+  - the wheels are outlined in red when flat and flash when one comes off;
+  - percent damaged is in the middle;
+  - a red cone points to where the last impact came from, for a few seconds (adjustable).
+
+![Damage widget](images/damage.png)
 
 ## Fixes to Kapps itself
 

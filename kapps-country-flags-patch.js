@@ -968,15 +968,20 @@ const WIDGET_TABS = [
 ];
 // Widgets with no Le Mans Ultimate equivalent: Track Map is an iRacing web map, Tyres reads iRacing's .ibt files.
 const IRACING_ONLY_WIDGETS = ['trackMap', 'tyres'];
+// and the other way round: iRacing shares no damage
+const LMU_ONLY_WIDGETS = ['damage'];
 
 function patchRacingOverlaySettingsHtml(src) {
   const isTab = (id) => `$root.widgetTab == '${id}'`;
   const showIn = (id) => `ng-show="${isTab(id)}" `;
+  // the same page serves iRacing's and LMU's overlays: a widget only one game has gets its tab on that game's,
+  // and a remembered tab of the other game's falls back to the first
+  const only = (id) => (IRACING_ONLY_WIDGETS.includes(id) ? 'ng-if="!isLmu" ' : LMU_ONLY_WIDGETS.includes(id) ? 'ng-if="isLmu" ' : '');
   // The green "on" dot only means something for widgets; settingsMain.custom/.system don't exist.
   const tab = (id, label) =>
-    `<a ${IRACING_ONLY_WIDGETS.includes(id) ? 'ng-if="!isLmu" ' : ''}ng-click="$root.widgetTab = '${id}'" ng-class="{selected: ${isTab(id)}, on: settingsMain.${id}}">${label}</a>`;
-  // the same page serves iRacing's and LMU's overlays; on LMU's, an iRacing-only tab falls back to the first
-  const initTab = `$root.widgetTab = !$root.widgetTab || isLmu && ${JSON.stringify(IRACING_ONLY_WIDGETS).replace(/"/g, "'")}.indexOf($root.widgetTab) >= 0 ? '${WIDGET_TABS[0][0]}' : $root.widgetTab`;
+    `<a ${only(id)}ng-click="$root.widgetTab = '${id}'" ng-class="{selected: ${isTab(id)}, on: settingsMain.${id}}">${label}</a>`;
+  const list = (ids) => JSON.stringify(ids).replace(/"/g, "'");
+  const initTab = `$root.widgetTab = !$root.widgetTab || (isLmu ? ${list(IRACING_ONLY_WIDGETS)} : ${list(LMU_ONLY_WIDGETS)}).indexOf($root.widgetTab) >= 0 ? '${WIDGET_TABS[0][0]}' : $root.widgetTab`;
   for (const [key] of WIDGET_TABS) {
     src = mustReplace(src, `enabled="settingsMain.${key}"`, `${showIn(key)}enabled="settingsMain.${key}"`, `settings.html ${key} panel`);
   }
@@ -1663,6 +1668,17 @@ class Lmu:
             'CarLeftRight': self.car_left_right(scor, tele, cars),
             # LMU only: virtual energy (0..1; 0 for classes without it, e.g. LMP2)
             'LmuVirtualEnergy': tele.mVirtualEnergy,
+            # LMU only, for the Damage widget: the 8 body zones' dents (0-2, in LMU's order), a detached part
+            # (only the rear wing can come off), each wheel detached or flat, percent damaged, and the last
+            # impact: when, and from where, in degrees clockwise from the nose (impact position is in the car's
+            # frame: x to the left, z to the rear)
+            'LmuDents': list(tele.mDentSeverity),
+            'LmuDetached': bool(tele.mDetached),
+            'LmuWheelsDetached': [bool(w.mDetached) for w in tele.mWheels],
+            'LmuWheelsFlat': [w.mPressure <= 1 for w in tele.mWheels],    # as TinyPedal: LMU's mFlat isn't to be relied on
+            'LmuDamage': data['CarIdxLmuDamage'][scor.mID],
+            'LmuImpactTime': tele.mLastImpactET,
+            'LmuImpactAngle': math.degrees(math.atan2(-tele.mLastImpactPos.x, -tele.mLastImpactPos.z)),
         })
         return data
 
@@ -2303,7 +2319,7 @@ function patchAppSettingsHtml(src) {
   );
 }
 
-// --- New widgets: Weather, Pit Brake, Rejoin Helper, Delta Bar, Flags ---------------------
+// --- New widgets: Weather, Pit Brake, Rejoin Helper, Delta Bar, Flags, Damage -------------
 // Widgets of our own, added alongside Kapps' (none are replaced). Each one is a single
 // racing-overlay/<dir>/index.html built on Kapps' own AngularJS and ir.service (js/common-*.js) like
 // the stock widgets, plus a shared community/widget.js + .css and a settings panel template.
@@ -2400,6 +2416,12 @@ const WEATHER_ITEMS = {
 
 // The Delta Bar's reference laps: iRacing's LapDeltaTo<id> variables (LMU only has BestLap).
 const DELTA_REFERENCES = [['BestLap', 'Your best lap'], ['SessionBestLap', 'Session best lap'], ['OptimalLap', 'Your optimal lap'], ['SessionOptimalLap', 'Session optimal lap']];
+
+// The Damage widget's drawing, in a 110 x 160 panel: where LMU's 8 dent zones go, in its order (front, front left,
+// left, rear left, rear (the wing, which can come off), rear right, right, front right), and the wheels (FL, FR,
+// RL, RR)
+const DAMAGE_ZONES = [[33, 0, 34, 22], [0, 0, 30, 22], [0, 25, 12, 100], [0, 128, 30, 22], [33, 128, 34, 22], [70, 128, 30, 22], [88, 25, 12, 100], [70, 0, 30, 22]];
+const DAMAGE_WHEELS = [[16, 32], [70, 32], [16, 90], [70, 90]];
 
 // The Flags widget's badges the user can add, in catalogue order (like WEATHER_ITEMS).
 const FLAG_ITEMS = {
@@ -2788,6 +2810,53 @@ app.controller('AppCtrl', function ($scope, config, Relatives) {
       formGroup('Layout', radios('layout', [['horizontal', 'Side by side'], ['vertical', 'Stacked']])) +
       formGroup('Low fuel', numberSetting('lowFuelLaps', 'min="0.5" max="10" step="0.5"', 'laps or fewer left')) +
       formGroup('Traffic', numberSetting('trafficGap', 'min="1" max="30" step="0.5"', 's or closer <span class="text-muted">— faster classes always, any car while you rejoin from the pits or off track</span>')),
+  },
+  {
+    // LMU only (LMU_ONLY_WIDGETS): the car from above, its 8 body zones around it coloured by damage, the wheels
+    // inside, percent damaged in the middle, and a cone towards the last impact for a few seconds
+    id: 'damage',
+    dir: 'damage',
+    title: 'Damage',
+    bounds: { width: 120, height: 180, minWidth: 40, minHeight: 60 },
+    position: '{x:Math.max(0,w-140),y:Math.max(0,(h>>1)+100)}',
+    defaultSettings: { hostPort: 8182, fps: 10, impactSec: 5 },
+    urlKeys: ['host', 'impactSec'],
+    telemetry: ['SessionTime', 'LmuDents', 'LmuDetached', 'LmuWheelsDetached', 'LmuWheelsFlat', 'LmuDamage', 'LmuImpactTime', 'LmuImpactAngle'],
+    css: `svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.zone { fill: #4a515c; }
+.zone.z1 { fill: #ffb020; }
+.zone.z2 { fill: #ff5252; }
+.zone.z3, .wheel.off { fill: #ff5252; animation: flash 1s step-end infinite; }
+.wheel { fill: #8a93a0; }
+.wheel.flat { fill: none; stroke: #ff5252; stroke-width: 3; }
+.impact { fill: rgba(255, 82, 82, .45); }
+text { fill: #fff; font-size: 15px; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
+@keyframes flash { 50% { fill: #b04dff; } }`,
+    // the cone is clipped to the panel by a group around it, as a clip on the cone itself would turn with it
+    html: `<svg ng-if="ir.connected && ir.LmuDents" viewBox="-5 -5 110 160">
+  <defs><rect id="panel" x="-5" y="-5" width="110" height="160" rx="9" /><clipPath id="panel-clip"><use href="#panel" /></clipPath></defs>
+  <use href="#panel" fill="rgba(12, 13, 15, .85)" />
+${DAMAGE_ZONES.map(([x, y, w, h], i) => `  <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="3" ng-attr-class="zone z{{ zone(${i}) }}" />`).join('\n')}
+${DAMAGE_WHEELS.map(([x, y], i) => `  <rect x="${x}" y="${y}" width="14" height="28" rx="3" ng-attr-class="wheel {{ wheel(${i}) }}" />`).join('\n')}
+  <g clip-path="url(#panel-clip)"><path ng-if="impact()" ng-attr-transform="rotate({{ ir.LmuImpactAngle }} 50 75)" d="M50 75 L28 -30 L72 -30 Z" class="impact" /></g>
+  <text x="50" y="75" ng-bind="ir.LmuDamage + '%'"></text>
+</svg>`,
+    js: `var SAMPLE = { connected: true, SessionTime: 10, LmuDents: [0, 1, 2, 0, 0, 0, 1, 0], LmuDetached: false, LmuWheelsDetached: [false, false, false, false], LmuWheelsFlat: [false, true, false, false], LmuDamage: 25, LmuImpactTime: 9, LmuImpactAngle: -50 };
+
+app.controller('AppCtrl', function ($scope, config) {
+  var ir = config.test ? ($scope.ir = SAMPLE) : $scope.ir;
+  // 0-2 by dent severity, 3 when the rear wing (zone 4) is off
+  $scope.zone = function (i) { return i === 4 && ir.LmuDetached ? 3 : ir.LmuDents[i]; };
+  $scope.wheel = function (i) { return ir.LmuWheelsDetached[i] ? 'off' : ir.LmuWheelsFlat[i] ? 'flat' : ''; };
+  // not before the impact either: its time can outlive a session's restarting clock
+  $scope.impact = function () {
+    var since = ir.SessionTime - ir.LmuImpactTime;
+    return ir.LmuImpactTime > 0 && since >= 0 && since < config.impactSec;
+  };
+});`,
+    settings:
+      description('Your car from above: its 8 body zones in amber or red as they get damaged (flashing if the rear wing comes off), the wheels (outlined in red when flat, flashing when off), percent damaged in the middle, and a red cone towards the last impact.') +
+      formGroup('Impact', numberSetting('impactSec', 'min="0" max="30" step="1"', 's <span class="text-muted">— how long the cone towards the last impact shows</span>')),
   },
 ];
 
