@@ -5,6 +5,7 @@ A community patch for [Kapps](https://kapps.kutu.ru), the iRacing overlay app wh
 - **Country flags** next to each driver in **Standings** and **Relatives**
 - A **Fastest Lap column** in **Standings**, highlighting whoever holds the fastest lap within their own class
 - Optional **column titles** in **Standings**, at the top of each class
+- Optional **full-colour car logos** in Standings and Relatives
 - A **Target Laps** row in the **Fuel Calculator**, showing the fuel-per-lap needed for a couple of laps around your current pace
 - An **Avg 5** row in the **Fuel Calculator**, showing a simple average of your fuel usage over the last 5 laps
 - A **modern look for the Kapps window**, with a **dark theme toggle** and **tabs for the Racing Overlay widgets** instead of one long list
@@ -51,6 +52,16 @@ Since a fastest lap in Practice or Qualify is often not that meaningful, the col
 Standings doesn't label its columns. Tick **Column Titles** in Standings' settings window (General tab, under "Show Headers") to add a row naming the columns (P, +/-, #, Driver, Rating, Gap, Int, Lap, and so on) at the top of each class, just under the class header. The titles follow whichever columns you've chosen and line up with them.
 
 ![Standings with a row of column titles at the top of each class](images/standings-column-titles.png)
+
+## Full-colour car logos
+
+Kapps shows each car's make as a small white logo in Standings, Standings (Legacy) and Relatives. Tick **Racing Overlay → System → Car Logos → Full colour** to show the makes' own colour logos instead, each on a light tile so dark logos stay visible. The setting is per profile, works for both iRacing and Le Mans Ultimate, and also applies to the Standings settings window's preview.
+
+Le Mans Ultimate makes that Kapps didn't know now get a logo too, in single colour or full colour: Alpine, Peugeot, Lexus, Oreca, Isotta Fraschini, Glickenhaus, Vanwall, Ginetta, Duqueine, Genesis and the current Corvette. Makes whose logo is only a wordmark (McLaren, Dallara, Oreca, Vanwall, Duqueine) are hard to read at small sizes.
+
+![Standings with full-colour car logos](images/colour-logos.png)
+
+The logos come from [car-logos-dataset](https://github.com/filippofilip95/car-logos-dataset) and Wikimedia Commons. All logos are trademarks of their owners.
 
 ## Target Laps and Avg 5 (Fuel Calculator)
 

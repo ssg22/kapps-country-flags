@@ -70,6 +70,10 @@ These were built to match TinyPedal and the shared memory docs, but only tested 
 - [ ] Flags **traffic**: in a multiclass race, a faster class closing in shows its class and gap (e.g. HYPER 2.4s). Leaving the pits or rejoining from off track shows any car closing in. It should **not** show on the grid or while stopped in your pit box.
 - [ ] Flags settings: add, remove and reorder badges, switch between side by side and stacked, and change the low-fuel laps and traffic gap.
 
+### Full-colour car logos (also check these in iRacing)
+- [ ] Tick **Racing Overlay → System → Car Logos → Full colour**. Standings, Standings (Legacy) and Relatives should switch to colour logos on light tiles, and the Standings settings window's preview should too. Untick it to get Kapps' white logos back.
+- [ ] LMU makes show a logo with colour on or off: Alpine, Peugeot, Lexus, Oreca, Isotta Fraschini, Glickenhaus, Vanwall, Ginetta, Duqueine, Genesis and Corvette. Note any car that shows no logo, and its name.
+
 ## 5. iRacing: check nothing broke
 
 - [ ] The Standings layer window opens, both with and without the Country Flag and Fastest Lap columns. A crash in that path was fixed on the way.
