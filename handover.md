@@ -81,6 +81,12 @@ These were built to match TinyPedal and the shared memory docs, but only tested 
   - READY / GREEN at a race start;
   - YELLOW / CAUTION, BLUE, LAST LAP / FINISH, BLACK FLAG / DSQ.
 - [ ] Flags **traffic**: in a multiclass race, a faster class closing in shows its class and gap (e.g. HYPER 2.4s). Leaving the pits or rejoining from off track shows any car closing in. It should **not** show on the grid or while stopped in your pit box.
+- [ ] **Lap History**: after a few laps, check that:
+  - each lap's time matches the game's;
+  - "best" marks your best lap;
+  - fuel used per lap looks right (VE % in an LMU VE car);
+  - a pit stop marks the in-lap and out-lap P and starts a new stint;
+  - the stint averages make sense.
 - [ ] Flags settings: add, remove and reorder badges, switch between side by side and stacked, and change the low-fuel laps and traffic gap.
 
 ### Full-colour car logos (also check these in iRacing)

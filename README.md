@@ -9,7 +9,7 @@ A community patch for [Kapps](https://kapps.kutu.ru), the iRacing overlay app wh
 - A **Target Laps** row in the **Fuel Calculator**, showing the fuel-per-lap needed for a couple of laps around your current pace
 - An **Avg 5** row in the **Fuel Calculator**, showing a simple average of your fuel usage over the last 5 laps
 - A **modern look for the Kapps window**, with a **dark theme toggle** and **tabs for the Racing Overlay widgets** instead of one long list
-- Five **new Racing Overlay widgets**: **Weather** (pick and order the conditions you want to see), **Pit Brake**, **Rejoin Helper**, **Delta Bar** and **Flags** (pit timer, limiter, low fuel, start lights, flags and traffic, each badge optional)
+- Six **new Racing Overlay widgets**: **Weather** (pick and order the conditions you want to see), **Pit Brake**, **Rejoin Helper**, **Delta Bar**, **Flags** (pit timer, limiter, low fuel, start lights, flags and traffic, each badge optional) and **Lap History**
 - A **banner when a new version of this patch is released**, with a setting to turn it off
 
 ## Country flags
@@ -88,9 +88,9 @@ The main Kapps window gets a cleaner, more modern look: rounded cards, softer bo
 
 This applies to the main Kapps window. The overlays themselves, and the separate settings windows some widgets open (such as Standings' column editor), are unchanged.
 
-## New widgets: Weather, Pit Brake, Rejoin Helper, Delta Bar and Flags
+## New widgets: Weather, Pit Brake, Rejoin Helper, Delta Bar, Flags and Lap History
 
-Five widgets are added to the Racing Overlay, each with its own tab. Kapps' own widgets are all still there. Switch them on from their tab, like any other widget. They can be moved and resized in the overlay's layout editor, or opened as their own layer window.
+Six widgets are added to the Racing Overlay, each with its own tab. Kapps' own widgets are all still there. Switch them on from their tab, like any other widget. They can be moved and resized in the overlay's layout editor, or opened as their own layer window.
 
 ### Weather
 
@@ -161,7 +161,17 @@ The low-fuel threshold (laps) and traffic gap (seconds) are adjustable.
 
 ![Flags widget](images/flags.png)
 
-The Weather, Pit Brake and Rejoin Helper ideas come from [KAPPS-UPDATE](https://github.com/Canedaaa/KAPPS-UPDATE) by Lucas Caneda, and the Delta Bar and Flags ideas from [TinyPedal](https://github.com/TinyPedal/TinyPedal). These versions were written separately for this patch.
+### Lap History
+
+Your last laps, newest first, each with:
+- its time and gap to your best lap (purple when it is your best);
+- the fuel it used: litres, US gallons with imperial units, or VE % for Le Mans Ultimate cars that use virtual energy.
+
+Laps on pit road are dimmed and marked **P**. Underneath, the stint since you last left the pits shows its average lap time, how many laps it has run and its average fuel per lap, leaving pit laps out. You can choose how many laps to show, and hide the fuel column or the stint row.
+
+![Lap History widget](images/lap-history.png)
+
+The Weather, Pit Brake and Rejoin Helper ideas come from [KAPPS-UPDATE](https://github.com/Canedaaa/KAPPS-UPDATE) by Lucas Caneda, and the Delta Bar, Flags and Lap History ideas from [TinyPedal](https://github.com/TinyPedal/TinyPedal). These versions were written separately for this patch.
 
 ## Le Mans Ultimate
 

@@ -2380,7 +2380,7 @@ function patchAppSettingsHtml(src) {
   );
 }
 
-// --- New widgets: Weather, Pit Brake, Rejoin Helper, Delta Bar, Flags, Damage -------------
+// --- New widgets: Weather, Pit Brake, Rejoin Helper, Delta Bar, Flags, Damage, Flat Spots, Lap History
 // Widgets of our own, added alongside Kapps' (none are replaced). Each one is a single
 // racing-overlay/<dir>/index.html built on Kapps' own AngularJS and ir.service (js/common-*.js) like
 // the stock widgets, plus a shared community/widget.js + .css and a settings panel template.
@@ -2414,6 +2414,11 @@ function kappsFit(widthEm, heightEm) {
   var fit = function () { document.documentElement.style.fontSize = Math.min(innerWidth / widthEm, innerHeight / heightEm) + 'px'; };
   addEventListener('resize', fit);
   fit();
+}
+
+// Your own entry in DriverInfo's Drivers, once there is one.
+function kappsMe(ir) {
+  return ir.DriverInfo && ir.DriversByCarIdx[ir.DriverInfo.DriverCarIdx];
 }
 
 // The nearest car behind on track (and accepted by accept(driver), if given): its DriverInfo entry and the
@@ -2837,7 +2842,7 @@ app.controller('AppCtrl', function ($scope, config, Relatives) {
     // a car closing in behind while racing: from a faster class any time, or any car while you rejoin (for 10 s
     // after leaving the pit lane, or after being slow or off track once up to speed, as Rejoin Helper)
     traffic: function (now) {
-      var me = ir.DriverInfo && ir.DriversByCarIdx && ir.DriversByCarIdx[ir.DriverInfo.DriverCarIdx], left = onPitRoad && !ir.OnPitRoad;
+      var me = kappsMe(ir), left = onPitRoad && !ir.OnPitRoad;
       onPitRoad = ir.OnPitRoad;
       if (ir.SessionState !== RACING) moved = false;
       else if (ir.Speed > 15) moved = true;
@@ -2948,6 +2953,110 @@ app.controller('AppCtrl', function ($scope, config) {
     settings:
       description('Each tyre\'s flat spot (front left, front right, rear left, rear right): the tread worn away while that wheel was locked under braking, as TinyPedal estimates it, since LMU doesn\'t share it. A tyre turns red from the size you set, and is outlined while its wheel is locked. A new tyre starts again at 0.') +
       formGroup('Warn at', numberSetting('warnAt', 'min="0.5" max="20" step="0.5"', '% <span class="text-muted">of tread lost while locked</span>')),
+  },
+  {
+    // your last laps, newest first: time, gap to your best, fuel used (VE for LMU's VE cars), pit laps marked,
+    // and the stint so far (since leaving the pits): laps, average lap and fuel per lap, leaving out pit laps
+    id: 'lapHistory',
+    dir: 'lap-history',
+    title: 'Lap History',
+    bounds: { width: 260, height: 190, minWidth: 100, minHeight: 50 },
+    position: '{x:20,y:Math.max(0,(h>>1)-95)}',
+    defaultSettings: { hostPort: 8182, fps: 10, laps: 6, showFuel: true, showStint: true },
+    urlKeys: ['host', 'laps', 'showFuel', 'showStint'],
+    telemetry: ['SessionNum', 'SessionTime', 'LapCompleted', 'LapLastLapTime', 'LapBestLapTime', 'OnPitRoad', 'FuelLevel', 'DisplayUnits', 'LmuVirtualEnergy'],
+    modules: ['ir.filters'],
+    css: `.history { padding: .3em .5em; border-radius: .45em; background: rgba(12, 13, 15, .85); font-variant-numeric: tabular-nums; }
+.row { display: grid; grid-template-columns: 2.6em 4.6em 4.2em 3.4em; align-items: center; height: 1.45em; text-align: right; white-space: nowrap; }
+.history.no-fuel .row { grid-template-columns: 2.6em 4.6em 4.2em; }
+.row > :first-child { text-align: left; }
+.row.head > span { color: rgba(255, 255, 255, .6); font-size: .8em; }
+.row.pit { color: rgba(255, 255, 255, .55); }
+.row.stint { border-top: 1px solid rgba(255, 255, 255, .15); font-weight: 700; }
+.best { color: #c77dff; }`,
+    html: `<div ng-if="ir.connected && laps.length" ng-class="{'no-fuel': !showFuel}" class="history">
+  <div class="row head"><span>Lap</span><span>Time</span><span>Best</span><span ng-if="showFuel" ng-bind="unit()"></span></div>
+  <div ng-repeat="lap in laps" ng-class="{pit: lap.pit}" class="row">
+    <span ng-bind="lap.number + (lap.pit ? ' P' : '')"></span>
+    <span ng-bind="lap.time ? (lap.time | timeFormat:3:true) : '-'"></span>
+    <span ng-bind="gap(lap.time)" ng-class="{best: gap(lap.time) === 'best'}"></span>
+    <span ng-if="showFuel" ng-bind="amount(lap.fuel)"></span>
+  </div>
+  <div ng-if="showStint && stint.laps" class="row stint">
+    <span>Stint</span>
+    <span ng-bind="stint.timed ? (stint.time / stint.timed | timeFormat:3:true) : '-'"></span>
+    <span ng-bind="stint.laps + (stint.laps === 1 ? ' lap' : ' laps')"></span>
+    <span ng-if="showFuel" ng-bind="amount(stint.fuel / stint.fuelled)"></span>
+  </div>
+</div>`,
+    js: `var SAMPLE = { connected: true, LapBestLapTime: 109.612 };
+var SAMPLE_LAPS = [[15, 109.842, 2.58], [14, 109.612, 2.61], [13, 110.305, 2.64], [12, 118.951, 2.07, true], [11, 110.477, 2.66], [10, 110.021, 2.6]];
+
+app.controller('AppCtrl', function ($scope, config) {
+  if (config.test) $scope.ir = SAMPLE;
+  var ir = $scope.ir, run = null, pending = null;
+  $scope.showFuel = config.showFuel;
+  $scope.showStint = config.showStint;
+  // columns 2.6 + 4.6 + 4.2 (+ 3.4 for fuel) em, padded .5em a side; rows 1.45em, padded .3em top and bottom
+  kappsFit(config.showFuel ? 15.8 : 12.4, (config.laps + (config.showStint ? 2 : 1)) * 1.45 + 0.6);
+  var ve = function () { var me = kappsMe(ir); return !!(me && me.LmuVe); };
+  // fuel in the units shown: percent of VE for LMU's VE cars, otherwise litres, or US gallons for imperial units
+  $scope.unit = function () { return ve() ? 'VE %' : ir.DisplayUnits === 0 ? 'gal' : 'L'; };
+  var fuel = function () { return ve() ? ir.LmuVirtualEnergy * 100 : ir.DisplayUnits === 0 ? ir.FuelLevel * 0.264172 : ir.FuelLevel; };
+  $scope.amount = function (v) { return v > 0 ? v.toFixed(2) : '-'; };
+  $scope.gap = function (t) { return t > 0 && ir.LapBestLapTime > 0 ? (t <= ir.LapBestLapTime ? 'best' : '+' + (t - ir.LapBestLapTime).toFixed(3)) : ''; };
+  var newStint = function () { $scope.stint = { laps: 0, time: 0, timed: 0, fuel: 0, fuelled: 0 }; };
+  // a lap joined part-way (on first data) has no fuel figure
+  var startRun = function (partway) { run = { number: ir.LapCompleted + 1, fuel: partway ? null : fuel(), pit: !!ir.OnPitRoad }; };
+  $scope.laps = [];
+  newStint();
+  if (config.test) {
+    $scope.laps = SAMPLE_LAPS.slice(0, config.laps).map(function (l) { return { number: l[0], time: l[1], fuel: l[2], pit: !!l[3] }; });
+    $scope.stint = { laps: 9, time: 4 * 110.0, timed: 4, fuel: 4 * 2.62, fuelled: 4 };
+    return;
+  }
+  // a lap is added once its new time is in: iRacing sets LapLastLapTime a moment after LapCompleted goes up (LMU's
+  // bridge at once); with none within 3 s (an out-lap or an invalid one) it gets no time
+  var finish = function () {
+    var time = ir.LapLastLapTime > 0 && ir.LapLastLapTime !== pending.lastTime ? ir.LapLastLapTime : null, stint = $scope.stint;
+    $scope.laps = [{ number: pending.number, time: time, fuel: pending.fuel, pit: pending.pit }].concat($scope.laps).slice(0, config.laps);
+    stint.laps++;
+    if (!pending.pit && time) {
+      stint.time += time;
+      stint.timed++;
+    }
+    if (!pending.pit && pending.fuel) {
+      stint.fuel += pending.fuel;
+      stint.fuelled++;
+    }
+    pending = null;
+  };
+  $scope.$watchGroup(['ir.LapCompleted', 'ir.LapLastLapTime', 'ir.OnPitRoad', 'ir.SessionNum'], function (n, o) {
+    if (ir.LapCompleted == null) return;
+    if (!run || ir.LapCompleted < run.number - 1 || n[3] !== o[3]) {    // first data, or a new session
+      $scope.laps = [];
+      newStint();
+      pending = null;
+      return startRun(true);
+    }
+    if (ir.OnPitRoad) run.pit = true;
+    else if (o[2]) newStint();                                          // just left the pits
+    if (ir.LapCompleted >= run.number) {
+      // more than one lap at once (a gap in telemetry): only the last is shown, without fuel
+      var used = ir.LapCompleted === run.number ? run.fuel - fuel() : null;
+      pending = { number: ir.LapCompleted, fuel: used > 0 ? used : null, pit: run.pit, lastTime: o[1], at: ir.SessionTime };
+      startRun();
+    }
+    if (pending && ir.LapLastLapTime !== pending.lastTime) finish();
+  });
+  $scope.$watch('ir.SessionTime', function (now) {
+    if (pending && now - pending.at > 3) finish();
+  });
+});`,
+    settings:
+      description('Your last laps, newest first, with each one\'s time, gap to your best lap and fuel used (virtual energy for LMU cars that use it), laps on pit road marked P; and your stint since leaving the pits: average lap, laps and fuel per lap, leaving pit laps out.') +
+      formGroup('Laps', numberSetting('laps', 'min="1" max="20" step="1"', 'shown')) +
+      formGroup('Show', checkbox('showFuel', 'Fuel used per lap') + checkbox('showStint', 'Stint summary')),
   },
 ];
 
