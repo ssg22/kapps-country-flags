@@ -54,7 +54,8 @@ These were built to match TinyPedal and the shared memory docs, but only tested 
 - [ ] Pedals and Inputs Graph: throttle, brake and **clutch** move the right way (the clutch was inverted to match iRacing).
 - [ ] Steering turns the right way (left is left).
 - [ ] Car Left/Right (spotter): cars alongside show on the **correct side**.
-- [ ] Fuel Calculator: fuel in litres and per-lap usage look right. VE in the Fuel Calculator isn't done yet.
+- [ ] Fuel Calculator in a car without VE (LMP2): fuel in litres and per-lap usage look right.
+- [ ] Fuel Calculator in a VE car (Hypercar): the first box reads **Energy %** and matches the car's VE. Average usage, laps remaining and refuel make sense in VE %, and the refuel amount matches what LMU's pit menu would add.
 - [ ] Weather: air and track temperature, rain and wetness.
 - [ ] Brake bias reads the same as in the car.
 - [ ] Try both offline with AI and online multiplayer.

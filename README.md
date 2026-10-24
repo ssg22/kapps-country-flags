@@ -57,7 +57,7 @@ Standings doesn't label its columns. Tick **Column Titles** in Standings' settin
 
 Kapps shows each car's make as a small white logo in Standings, Standings (Legacy) and Relatives. Tick **Racing Overlay → System → Car Logos → Full colour** to show the makes' own colour logos instead, each on a light tile so dark logos stay visible. The setting is per profile, works for both iRacing and Le Mans Ultimate, and also applies to the Standings settings window's preview.
 
-Le Mans Ultimate makes that Kapps didn't know now get a logo too, in single colour or full colour: Alpine, Peugeot, Lexus, Oreca, Isotta Fraschini, Glickenhaus, Vanwall, Ginetta, Duqueine, Genesis and the current Corvette. Makes whose logo is only a wordmark (McLaren, Dallara, Oreca, Vanwall, Duqueine) are hard to read at small sizes.
+Le Mans Ultimate makes that Kapps didn't know now get a logo too, in single colour or full colour: Alpine, Peugeot, Lexus, Oreca, Isotta Fraschini, Glickenhaus, Vanwall, Ginetta, Duqueine, Genesis and the current Corvette. Makes whose logo is only a wordmark (McLaren, Dallara, Vanwall, Duqueine, Glickenhaus) get a wider logo in Standings, so they stay readable. In Relatives and Standings (Legacy), where the logo has to fit a square, they're hard to read.
 
 ![Standings with full-colour car logos](images/colour-logos.png)
 
@@ -170,6 +170,7 @@ The **Le Mans Ultimate** tab has its own Racing Overlay, with the same widgets a
 What's different from iRacing:
 - Options with nothing behind them in LMU are hidden: SOF, incidents, humidity, rating gain, country flags and joker laps.
 - Standings has LMU-only **DMG** (damage), **FUEL** (virtual energy in blue for cars that use it, fuel otherwise) and **TYRES** columns. TYRES shows each wheel's compound, since LMU allows mixing them.
+- For cars that run on virtual energy, the **Fuel Calculator** works in percent of VE, shown as **Energy %**: usage per lap, laps remaining and refuel all count VE, the way LMU's pit menu refills it. Cars without VE (LMP2, for example) stay in litres.
 - There's no Rating column yet, because LMU's Safety and Driver Ratings aren't available to Kapps. Track Map and Tyres are iRacing-only.
 - LMU shares no start lights, so Flags shows READY for the countdown. The Delta Bar compares against your best lap only.
 
