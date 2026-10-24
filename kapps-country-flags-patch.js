@@ -968,8 +968,8 @@ const WIDGET_TABS = [
 ];
 // Widgets with no Le Mans Ultimate equivalent: Track Map is an iRacing web map.
 const IRACING_ONLY_WIDGETS = ['trackMap'];
-// and the other way round: iRacing shares no damage
-const LMU_ONLY_WIDGETS = ['damage'];
+// and the other way round: iRacing shares no damage, and no tyre wear while driving to estimate flat spots from
+const LMU_ONLY_WIDGETS = ['damage', 'flatSpots'];
 
 function patchRacingOverlaySettingsHtml(src) {
   const isTab = (id) => `$root.widgetTab == '${id}'`;
@@ -1526,6 +1526,52 @@ def abbrev(name):
     return '%s, %s' % (parts[-1], parts[0][0]) if len(parts) > 1 else name
 
 
+def car_speed(tele):
+    return math.sqrt(tele.mLocalVel.x ** 2 + tele.mLocalVel.y ** 2 + tele.mLocalVel.z ** 2)
+
+
+class FlatSpots:
+    """An estimate of each tyre's flat spot, as TinyPedal makes it (LMU shares none): the tread worn away (percent)
+    while its wheel was locked under braking. A wheel is locked when its slip ratio, from its rotation and its axle's
+    rolling radius (averaged while both of the axle's wheels roll alike), is below -0.3 with the brake on."""
+
+    def __init__(self, car=None):
+        self.car = car                  # the car and session these are for
+        self.elapsed = None             # the telemetry's time at the last update
+        self.radius = [None, None]      # front and rear axles' rolling radius (m)
+        self.wear = None                # each tyre's tread left (0..1) at the last update
+        self.spots = [0.0] * 4          # FL, FR, RL, RR: percent of tread worn while locked
+        self.locked = [False] * 4       # whether each wheel is locked now
+
+    def update(self, car, tele, in_pits):
+        """Adds the wear since the last update (run every tick: locks can be brief) to the locked wheels'."""
+        if car != self.car:
+            self.__init__(car)
+        if tele.mElapsedTime == self.elapsed:           # LMU hasn't updated (or is paused)
+            return
+        self.elapsed = tele.mElapsedTime
+        speed = car_speed(tele)
+        rotation = [w.mRotation for w in tele.mWheels]      # rad/s, negative rolling forwards
+        smoothing = 2 / max(abs(40 * tele.mLocalAccel.x), abs(40 * tele.mLocalAccel.z), 20)
+        for axle in (0, 1):
+            left, right = rotation[2 * axle:2 * axle + 2]
+            mean = (left + right) / 2
+            if speed > 1 and mean < -4 and abs((left - right) / mean) < 0.002:
+                old = self.radius[axle]
+                self.radius[axle] = speed / -mean if old is None else old + smoothing * (speed / -mean - old)
+        braking = speed > 1 and tele.mUnfilteredBrake > 0.02
+        self.locked = [braking and self.radius[i // 2] is not None and abs(r) * self.radius[i // 2] / speed - 1 < -0.3
+                       for i, r in enumerate(rotation)]
+        wear = [w.mWear for w in tele.mWheels]
+        for i, (old, new) in enumerate(zip(self.wear or wear, wear)):
+            worn = (old - new) * 100
+            if in_pits and (worn < 0 or worn > 1):          # a fresh tyre
+                self.spots[i] = 0.0
+            elif 0 < worn <= 1 and self.locked[i]:
+                self.spots[i] += worn
+        self.wear = wear
+
+
 class Lmu:
     """One consistent LMU snapshot, translated into iRacing's telemetry variables and session info."""
 
@@ -1539,6 +1585,7 @@ class Lmu:
         self.best_lap = {}              # car mID -> lap its best time was set on
         self.class_colours = {}         # class -> (short name, colour) this session; see class_info
         self.class_session = None
+        self.flat_spots = FlatSpots()
         self.ve_cars = set()            # (mID, vehicle) of cars that have reported virtual energy; mIDs are
                                         # reused by other cars in later sessions
 
@@ -1555,6 +1602,10 @@ class Lmu:
     def update(self):
         self.memory.update()
         self.tick += 1
+        scor, tele = self.player() or (None, None)
+        if tele:
+            info = self.memory.data.scoring.scoringInfo
+            self.flat_spots.update((info.mSession, scor.mID, scor.mVehicleName), tele, scor.mInPits)
 
     def cars(self):
         """(scoring, telemetry) per car, telemetry matched by mID: the two arrays aren't in the same order."""
@@ -1627,7 +1678,7 @@ class Lmu:
         })
         if scor is None or tele is None:
             return data
-        speed = math.sqrt(tele.mLocalVel.x ** 2 + tele.mLocalVel.y ** 2 + tele.mLocalVel.z ** 2)
+        speed = car_speed(tele)
         steer_range = math.radians(tele.mPhysicalSteeringWheelRange or 540)
         data.update({
             'CamCarIdx': scor.mID,
@@ -1679,6 +1730,9 @@ class Lmu:
             'LmuDamage': data['CarIdxLmuDamage'][scor.mID],
             'LmuImpactTime': tele.mLastImpactET,
             'LmuImpactAngle': math.degrees(math.atan2(-tele.mLastImpactPos.x, -tele.mLastImpactPos.z)),
+            # LMU only, for the Flat Spots widget: see FlatSpots
+            'LmuWheelsLocked': self.flat_spots.locked,
+            'LmuFlatSpots': [round(spot, 2) for spot in self.flat_spots.spots],
             # the Tyres widget reads iRacing's .ibt file, which Kapps' server serves as arrays of the samples since
             # the last update; LMU's are live, so each is the latest sample alone
             'ibt_LapDistPct': [data['CarIdxLapDistPct'][scor.mID]],
@@ -2864,6 +2918,36 @@ app.controller('AppCtrl', function ($scope, config) {
     settings:
       description('Your car from above: its 8 body zones in amber or red as they get damaged (flashing if the rear wing comes off), the wheels (outlined in red when flat, flashing when off), percent damaged in the middle, and a red cone towards the last impact.') +
       formGroup('Impact', numberSetting('impactSec', 'min="0" max="30" step="1"', 's <span class="text-muted">— how long the cone towards the last impact shows</span>')),
+  },
+  {
+    // LMU only (LMU_ONLY_WIDGETS): each tyre's flat spot, as the bridge estimates it (FlatSpots in LMU_BRIDGE_PY), red from a set size,
+    // and outlined while the wheel is locked
+    id: 'flatSpots',
+    dir: 'flat-spots',
+    title: 'Flat Spots',
+    bounds: { width: 160, height: 90, minWidth: 60, minHeight: 34 },
+    position: '{x:Math.max(0,w-180),y:Math.max(0,Math.min(h-90,(h>>1)+290))}',
+    defaultSettings: { hostPort: 8182, fps: 10, warnAt: 3 },
+    urlKeys: ['host', 'warnAt'],
+    telemetry: ['LmuFlatSpots', 'LmuWheelsLocked'],
+    css: `.flats { position: absolute; inset: 0; display: grid; grid-template-columns: 1fr 1fr; gap: .25em; padding: .25em; border-radius: .45em; background: rgba(12, 13, 15, .85); }
+.tyre { display: flex; align-items: center; justify-content: center; border-radius: .3em; background: #4a515c; font-weight: 700; }
+.tyre.warn { background: #ff5252; color: #000; }
+.tyre.locked { box-shadow: inset 0 0 0 .15em #ffb020; }`,
+    html: `<div ng-if="ir.connected && ir.LmuFlatSpots" class="flats">
+  <div ng-repeat="spot in ir.LmuFlatSpots track by $index" ng-class="{warn: spot >= warnAt, locked: ir.LmuWheelsLocked[$index]}" class="tyre" ng-bind="spot.toFixed(2) + '%'"></div>
+</div>`,
+    js: `var SAMPLE = { connected: true, LmuFlatSpots: [0.42, 3.18, 0, 1.05], LmuWheelsLocked: [true, false, false, false] };
+
+app.controller('AppCtrl', function ($scope, config) {
+  if (config.test) $scope.ir = SAMPLE;
+  $scope.warnAt = config.warnAt;
+  // 2 x 2 tiles of about 3.9 x 1.9em ("10.25%" fits), .25em apart and padded
+  kappsFit(8.6, 4.6);
+});`,
+    settings:
+      description('Each tyre\'s flat spot (front left, front right, rear left, rear right): the tread worn away while that wheel was locked under braking, as TinyPedal estimates it, since LMU doesn\'t share it. A tyre turns red from the size you set, and is outlined while its wheel is locked. A new tyre starts again at 0.') +
+      formGroup('Warn at', numberSetting('warnAt', 'min="0.5" max="20" step="0.5"', '% <span class="text-muted">of tread lost while locked</span>')),
   },
 ];
 

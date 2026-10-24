@@ -60,6 +60,11 @@ These were built to match TinyPedal and the shared memory docs, but only tested 
   - a puncture outlines that wheel in red;
   - the percentage matches Standings' DMG column.
   If the cone points the wrong way, say which way it was hit and which way the cone pointed: LMU's impact position might be in world coordinates rather than the car's own.
+- [ ] **Flat Spots** widget (LMU tab only): lock a wheel under braking and check that:
+  - that tyre is outlined while it's locked, and only then;
+  - its percentage grows with heavy lockups and passes your warning size;
+  - it resets after a tyre change in the pits.
+  Compare with TinyPedal's Tyre Wear flat-spot figure if you have it.
 - [ ] Fuel Calculator in a car without VE (LMP2): fuel in litres and per-lap usage look right.
 - [ ] Fuel Calculator in a VE car (Hypercar): the first box reads **Energy %** and matches the car's VE. Average usage, laps remaining and refuel make sense in VE %, and the refuel amount matches what LMU's pit menu would add.
 - [ ] Weather: air and track temperature, rain and wetness.

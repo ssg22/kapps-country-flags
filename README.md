@@ -181,6 +181,12 @@ What's different from iRacing:
 
 ![Damage widget](images/damage.png)
 
+- An LMU-only **Flat Spots** widget shows each tyre's flat spot as a percentage. LMU doesn't share flat spots, so it estimates them the way TinyPedal does: the tread worn away while that wheel was locked under braking.
+  - A tyre turns red from the size you set (3% by default), and is outlined while its wheel is locked.
+  - A new tyre starts again at 0.
+
+![Flat Spots widget](images/flat-spots.png)
+
 ## Fixes to Kapps itself
 
 The patch also fixes bugs in Kapps' own widgets:
